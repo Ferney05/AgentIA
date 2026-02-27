@@ -267,12 +267,13 @@ def insertar_log(
     usuario_id: int | None = None,
     nombre_bd: str = "kyber.db",
 ) -> None:
-    conn = sqlite3.connect(nombre_bd)
+    conn = _get_connection()
     cursor = conn.cursor()
+    p = _get_placeholder()
     cursor.execute(
-        """
+        f"""
         INSERT INTO logs (fecha, remitente, asunto, resumen, accion, idioma, categoria, usuario_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})
         """,
         (fecha, remitente, asunto, resumen, accion, idioma, categoria, usuario_id),
     )
@@ -283,14 +284,22 @@ def insertar_log(
 def crear_usuario(
     email: str, password_hash: str, creado_en: str, nombre_bd: str = "kyber.db"
 ) -> int:
-    conn = sqlite3.connect(nombre_bd)
+    conn = _get_connection()
     cursor = conn.cursor()
+    p = _get_placeholder()
     cursor.execute(
-        "INSERT INTO usuarios (email, password_hash, creado_en) VALUES (?, ?, ?)",
+        f"INSERT INTO usuarios (email, password_hash, creado_en) VALUES ({p}, {p}, {p})",
         (email, password_hash, creado_en),
     )
     conn.commit()
-    user_id = cursor.lastrowid
+    
+    # En PostgreSQL se usa RETURNING id, en SQLite lastrowid
+    if os.environ.get("DATABASE_URL"):
+        cursor.execute("SELECT LASTVAL()")
+        user_id = cursor.fetchone()[0]
+    else:
+        user_id = cursor.lastrowid
+        
     conn.close()
     return user_id
 

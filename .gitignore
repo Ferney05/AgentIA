@@ -1,0 +1,8 @@
+.venv/
+kyber.db
+.env
+__pycache__/
+*.pyc
+*.log
+
+INSTALACION_OTRA_PC.txt

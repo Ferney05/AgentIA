@@ -1,0 +1,142 @@
+ACUERDO DE LICENCIA DE SOFTWARE
+================================
+
+Nombre del software: KYBER – Agente de correo con IA  
+Titular: SHEI (Ferney Barbosa)  
+Cliente licenciatario: Mosaic Machines
+
+
+1. Aceptación de la licencia
+----------------------------
+
+El uso de este software (“El Software” o “El Agente”) implica la aceptación plena de los términos establecidos en este documento.  
+Si el licenciatario no acepta estos términos, no debe instalar, ejecutar ni utilizar el Software.
+
+
+2. Concesión de licencia
+------------------------
+
+SHEI concede a Mosaic Machines una **licencia de uso limitada, no exclusiva, no transferible y revocable** para ejecutar el Software en sus propios equipos y únicamente para la gestión de su bandeja de correo corporativo.
+
+Esta licencia no constituye una venta del Software ni de ninguno de sus componentes.
+
+
+3. Alcance del uso autorizado
+-----------------------------
+
+El licenciatario podrá:
+
+1. Instalar y ejecutar el Software en uno o varios equipos propios, locales o servidores controlados por la empresa licenciataria.  
+2. Configurar el Software con sus propias cuentas de Gmail, claves de API y parámetros operativos.  
+3. Utilizar el Software exclusivamente para la gestión de correos electrónicos relacionados con la actividad de Mosaic Machines.
+
+Queda expresamente prohibido cualquier otro uso que no esté contemplado en esta cláusula.
+
+
+4. Propiedad intelectual
+------------------------
+
+Todo el código fuente, arquitectura de la solución, lógica de los agentes de IA, diseño de las bases de datos, plantillas, interfaces de usuario y documentación asociada son y seguirán siendo **propiedad exclusiva de SHEI**.
+
+Esta licencia no otorga al licenciatario ningún derecho de propiedad sobre el Software, sino únicamente un derecho de uso en los términos aquí descritos.
+
+
+5. Restricciones
+----------------
+
+El licenciatario **no** podrá, salvo autorización previa, expresa y por escrito de SHEI:
+
+1. Vender, alquilar, sublicenciar, ceder o transferir el Software, su código fuente o cualquier parte de él a terceros.  
+2. Copiar o distribuir el Software fuera de la organización Mosaic Machines, ya sea gratuitamente o mediante contraprestación económica.  
+3. Realizar ingeniería inversa, descompilación, desensamblado, extracción de modelos, reutilización del núcleo de IA o cualquier procedimiento destinado a obtener o modificar la lógica interna con el fin de crear productos derivados o competidores.  
+4. Modificar el núcleo de la lógica de IA, las integraciones con servicios externos o la estructura de la base de datos con finalidad comercial o de redistribución.  
+5. Utilizar el Software para prestar servicios similares a los que ofrece SHEI a terceros, salvo acuerdo de colaboración o reventa formalizado por escrito.
+
+
+6. Confidencialidad
+-------------------
+
+El licenciatario se compromete a tratar el código fuente, la estructura de la base de datos, los prompts de IA y cualquier documentación técnica suministrada por SHEI como información confidencial, y a no divulgarla a terceros sin autorización previa y por escrito.
+
+
+7. Servicios y dependencias de terceros
+---------------------------------------
+
+El Software se apoya en servicios de terceros, incluyendo de forma no limitativa:
+
+- Google / Gmail (acceso IMAP y uso de credenciales de cuenta).  
+- Gemini / Google Generative AI (API de modelos de lenguaje).  
+
+El licenciatario es responsable de:
+
+1. Crear y mantener las cuentas, claves de API y contraseñas de aplicación necesarias.  
+2. Cumplir las políticas de uso, términos y condiciones de dichos servicios.  
+3. Configurar y proteger los secretos y credenciales en sus propios sistemas.
+
+SHEI no controla ni garantiza la continuidad, calidad o disponibilidad de los servicios prestados por estos terceros.
+
+
+8. Limitación de responsabilidad
+--------------------------------
+
+Dentro de los límites establecidos por la legislación aplicable, SHEI no será responsable frente al licenciatario ni frente a terceros por:
+
+1. Cualquier decisión, respuesta o contenido generado por los modelos de IA (Gemini u otros), incluso cuando se haya configurado siguiendo las reglas definidas en el Software.  
+2. Pérdidas de datos, interrupciones del servicio, errores de clasificación de correos o borradores, ni daños directos, indirectos, incidentales, especiales, consecuentes o punitivos derivados del uso o imposibilidad de uso del Software.  
+3. Problemas derivados de una configuración incorrecta de credenciales, permisos de Gmail, políticas de seguridad o fallos de infraestructura del licenciatario.
+
+En cualquier caso, la responsabilidad total acumulada de SHEI respecto del licenciatario por cualquier concepto derivado de esta licencia quedará limitada, como máximo, al importe efectivamente abonado por la licencia de uso del Software.
+
+
+9. Ausencia de garantías
+------------------------
+
+El Software se proporciona “tal cual” (“as is”), sin garantías de ningún tipo, expresas o implícitas, incluyendo, sin limitación, garantías de comerciabilidad, adecuación a un propósito particular, exactitud de resultados o no infracción.
+
+El licenciatario asume íntegramente los riesgos derivados del uso del Software y de la información producida por los modelos de IA integrados.
+
+
+10. Actualizaciones, mantenimiento y soporte
+-------------------------------------------
+
+Salvo que se pacte expresamente lo contrario por escrito:
+
+1. La licencia otorgada en este documento **no** incluye de forma automática servicios de mantenimiento evolutivo, correctivo ni adaptativo.  
+2. Cualquier trabajo de actualización (por ejemplo, cambios en APIs de terceros, nuevas reglas de negocio, ampliación de funcionalidades o soporte técnico) se contratará de forma independiente con SHEI.  
+3. SHEI se reserva el derecho de ofrecer nuevas versiones o módulos del Software bajo condiciones económicas o de licencia distintas a las aquí descritas.
+
+
+11. Duración y terminación
+--------------------------
+
+Esta licencia entrará en vigor en la fecha de entrega del Software al licenciatario y permanecerá vigente mientras:
+
+1. El licenciatario cumpla las condiciones de este acuerdo.  
+2. No se haya comunicado formalmente su revocación por parte de SHEI, en caso de incumplimiento grave o uso no autorizado.
+
+SHEI podrá resolver la licencia de forma inmediata si el licenciatario:
+
+- Incumple las restricciones de uso o confidencialidad.  
+- Redistribuye el Software, código fuente o derivados sin autorización.  
+- Utiliza el Software en violación de la ley o de los términos de los servicios de terceros integrados.
+
+Tras la terminación, el licenciatario deberá cesar el uso del Software y eliminar las copias instaladas, sin perjuicio de las obligaciones de confidencialidad y propiedad intelectual que seguirán vigentes.
+
+
+12. Legislación aplicable y jurisdicción
+----------------------------------------
+
+Este acuerdo se regirá e interpretará de conformidad con las leyes de la República de Colombia, sin perjuicio de las normas de conflicto de leyes que pudieran resultar aplicables.
+
+Cualquier controversia derivada de este acuerdo será sometida a los juzgados y tribunales competentes del domicilio de SHEI, salvo que las partes acuerden expresamente un mecanismo alternativo de resolución de conflictos.
+
+
+13. Disposiciones finales
+-------------------------
+
+La nulidad o invalidez de alguna de las cláusulas de este acuerdo no afectará a la validez del resto.  
+Cualquier modificación o excepción a estos términos deberá constar por escrito y estar firmada por un representante autorizado de SHEI.
+
+
+© 2026 SHEI. Todos los derechos reservados.
+

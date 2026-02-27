@@ -1,0 +1,310 @@
+GUÍA DE INSTALACIÓN DE KYBER EN OTRA PC (WINDOWS)
+=================================================
+
+Esta guía indica, paso a paso, cómo instalar y dejar funcionando KYBER
+en una computadora con Windows.
+
+1. Requisitos previos en la nueva PC
+------------------------------------
+
+1.1. Instalar Python
+--------------------
+
+1. Abre el navegador y entra a:
+   https://www.python.org/downloads/
+2. Descarga la versión recomendada de Python 3.11 (o superior) para Windows.
+3. Ejecuta el instalador y, en la primera pantalla, marca la casilla:
+   "Add Python to PATH".
+4. Completa la instalación.
+
+Para comprobar que Python quedó instalado:
+1. Abre PowerShell.
+2. Escribe:
+
+   python --version
+
+Si ves algo como `Python 3.11.x`, está correcto.
+
+
+
+1.3. Crear las cuentas y claves necesarias
+-----------------------------------------
+
+Para usar KYBER en su cuenta se necesitarán las siguientes credenciales:
+
+- Cuenta de Gmail con:
+  - Acceso IMAP habilitado.
+  - Contraseña de aplicación (app password) creada en la cuenta de Google.
+- Cuenta en Google AI Studio para usar Gemini:
+  - Debes tener una API key válida.
+
+Ten a mano:
+- Correo de Gmail que usará KYBER.
+- Contraseña de aplicación de ese Gmail.
+- API key de Gemini.
+
+
+2. Copiar el proyecto a la nueva PC
+-----------------------------------
+
+2.1. Desde un ZIP, USB o red
+----------------------------
+
+1. Copia la carpeta del proyecto (por ejemplo `AgentIA`) a la nueva PC.
+2. Recomiendo que la ubiques en:
+
+   C:\Users\TU_USUARIO\Documents\AgentIA
+
+   (Sustituye `TU_USUARIO` por tu usuario de Windows.)
+
+IMPORTANTE:
+- No copies el entorno virtual `.venv` de la otra máquina.
+- No copies `kyber.db` si quieres empezar con una base de datos limpia.
+
+
+2.2. Comprobar la ruta del proyecto
+-----------------------------------
+
+Abre PowerShell y navega a la carpeta:
+
+cd C:\Users\TU_USUARIO\Documents\AgentIA
+
+Puedes listar archivos con:
+
+dir
+
+Deberías ver subcarpetas como `kyber`, `templates`, y archivos como
+`README.md`, `LICENSE.txt`, `INSTALACION_OTRA_PC.txt`, etc.
+
+
+3. Crear y activar el entorno virtual (.venv)
+--------------------------------------------
+
+Todos los comandos de instalación se ejecutan dentro del entorno
+virtual para no mezclar librerías con el sistema.
+
+3.1. Crear el entorno virtual
+-----------------------------
+
+En PowerShell, dentro de la carpeta del proyecto:
+
+cd C:\Users\TU_USUARIO\Documents\AgentIA
+python -m venv .venv
+
+Esto creará una carpeta `.venv` con Python y pip aislados.
+
+
+3.2. Activar el entorno virtual
+-------------------------------
+
+Siempre que vayas a trabajar con KYBER, primero activa el entorno:
+
+cd C:\Users\TU_USUARIO\Documents\AgentIA
+.venv\Scripts\Activate.ps1
+
+Si la activación fue correcta, verás algo como:
+
+(.venv) C:\Users\TU_USUARIO\Documents\AgentIA>
+
+Si recibes un error de políticas de ejecución (ExecutionPolicy):
+
+1. Abre PowerShell como Administrador.
+2. Ejecuta:
+
+   Set-ExecutionPolicy RemoteSigned
+
+3. Acepta con `Y`.
+4. Cierra ese PowerShell de administrador.
+5. Abre un nuevo PowerShell normal, ve a la carpeta del proyecto y activa:
+
+   cd C:\Users\TU_USUARIO\Documents\AgentIA
+   .venv\Scripts\Activate.ps1
+
+
+4. Instalar las librerías dentro del entorno virtual
+----------------------------------------------------
+
+Con el entorno virtual activo (`(.venv)` al inicio de la línea), instala
+las dependencias principales:
+
+pip install fastapi "uvicorn[standard]" starlette jinja2 google-generativeai
+
+Espera a que termine sin errores.
+
+Si en el futuro agregas un archivo `requirements.txt`, podrás usar:
+
+pip install -r requirements.txt
+
+
+5. Crear y configurar el archivo .env
+-------------------------------------
+
+KYBER lee la configuración desde un archivo `.env` en la raíz del
+proyecto. Este archivo contiene las credenciales y parámetros de
+funcionamiento.
+
+5.1. Crear el archivo .env
+--------------------------
+
+En la carpeta del proyecto (donde está `kyber`, `templates`, etc.),
+crea un archivo llamado:
+
+.env
+
+Puedes crearlo desde un editor como Notepad o VS Code.
+
+
+5.2. Contenido básico del .env
+------------------------------
+
+Ejemplo de contenido mínimo:
+
+KYBER_GMAIL_USER=tu_correo@gmail.com
+KYBER_GMAIL_APP_PASSWORD=tu_clave_de_aplicacion
+
+GEMINI_API_KEY=tu_api_key_de_gemini
+
+KYBER_COMPANY_NAME=Nombre de tu empresa
+
+KYBER_SCAN_BATCH=10
+KYBER_SCAN_MAX=100
+
+KYBER_SESSION_SECRET=una_clave_larga_y_secreta
+
+Explicación rápida:
+- KYBER_GMAIL_USER:
+  Correo de Gmail que usará KYBER.
+- KYBER_GMAIL_APP_PASSWORD:
+  Contraseña de aplicación generada en la cuenta de Google para ese Gmail.
+- GEMINI_API_KEY:
+  API key de Gemini, obligatoria para que la IA funcione.
+- KYBER_COMPANY_NAME:
+  Nombre de la empresa; KYBER lo usa para limpiar menciones en borradores.
+- KYBER_SCAN_BATCH:
+  Número de correos que procesa por lote en cada escaneo.
+- KYBER_SCAN_MAX:
+  Número máximo de correos no leídos que revisa en un escaneo.
+- KYBER_SESSION_SECRET:
+  Clave secreta para las sesiones web (puede ser una cadena larga aleatoria).
+
+
+6. Inicializar la base de datos (kyber.db)
+-----------------------------------------
+
+No hace falta ejecutar scripts manuales: la base de datos SQLite se crea
+automáticamente la primera vez que levantas el servidor.
+
+- Cuando arranca la aplicación, se llama a `crear_base_de_datos()` y se
+  generan las tablas necesarias (usuarios, reglas, respuestas, logs).
+
+Si copiaste una base de datos vieja y quieres empezar limpio:
+- Cierra el servidor.
+- Borra el archivo `kyber.db` de la carpeta del proyecto.
+- Vuelve a levantar el servidor (ver paso 7) para que se recree.
+
+
+7. Levantar el servidor de KYBER
+--------------------------------
+
+Con el entorno virtual activo y el `.env` ya configurado:
+
+1. Abre PowerShell.
+2. Activa el entorno (si aún no lo está):
+
+   cd C:\Users\TU_USUARIO\Documents\AgentIA
+   .venv\Scripts\Activate.ps1
+
+3. Ejecuta el servidor:
+
+   uvicorn kyber.web:app --reload
+
+Si todo está bien, deberías ver que Uvicorn arranca en la dirección:
+
+http://127.0.0.1:8000
+
+
+8. Acceder al panel web
+-----------------------
+
+Con el servidor corriendo:
+
+1. Abre tu navegador (Chrome, Edge, etc.).
+2. Ve a:
+
+   http://127.0.0.1:8000
+
+Como aún no hay usuarios, primero deberás registrarte.
+
+
+9. Registrar el primer usuario
+------------------------------
+
+1. En el navegador, abre:
+
+   http://127.0.0.1:8000/auth/register
+
+2. Ingresa:
+   - Correo (puede ser el mismo Gmail que usas para KYBER o uno distinto).
+   - Contraseña.
+3. Tras registrarte, quedarás autenticado y se creará el usuario en la
+   base de datos `kyber.db`.
+
+La próxima vez podrás entrar con:
+
+http://127.0.0.1:8000/auth/login
+
+
+10. Probar el escaneo de correos
+--------------------------------
+
+Ya dentro del panel:
+
+1. Verifica que ves el dashboard con:
+   - Borradores creados.
+   - Reglas activas.
+   - Historial reciente.
+2. Pulsa el botón "Escanear una vez".
+3. Si hay correos no leídos en la bandeja del Gmail configurado y la
+   configuración de `.env` es correcta:
+   - KYBER analizará los correos.
+   - Creará borradores en Gmail cuando corresponda.
+   - Registrará todo en el historial (incluidos los hilos omitidos por
+     borradores previos).
+
+
+11. Resumen rápido de comandos en la nueva PC
+---------------------------------------------
+
+Estos son los comandos clave, en orden:
+
+1. (Una sola vez por PC) Crear entorno virtual:
+
+   cd C:\Users\TU_USUARIO\Documents\AgentIA
+   python -m venv .venv
+
+2. Activar entorno virtual (cada vez que vayas a trabajar):
+
+   cd C:\Users\TU_USUARIO\Documents\AgentIA
+   .venv\Scripts\Activate.ps1
+
+3. Instalar librerías (primera vez en esa máquina):
+
+   pip install fastapi "uvicorn[standard]" starlette jinja2 google-generativeai
+
+4. Levantar servidor:
+
+   uvicorn kyber.web:app --reload
+
+
+12. Notas finales
+-----------------
+
+- No compartas el archivo `.env` ni tus claves con terceros.
+- Si cambias de cuenta de Gmail o de API key de Gemini:
+  - Edita el archivo `.env`.
+  - Reinicia el servidor.
+- Si ves errores relacionados con `GEMINI_API_KEY` o las credenciales
+  de Gmail, revisa cuidadosamente los valores en `.env`.
+
+
+FIN DE LA GUÍA

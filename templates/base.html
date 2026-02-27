@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}KYBER{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+  </head>
+  <body
+    class="min-h-screen bg-slate-950 text-slate-100"
+    style="font-family: 'Trebuchet MS', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;"
+  >
+    <style>
+      @keyframes kyberPulse {
+        0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.0); }
+        50% { transform: scale(1.04); box-shadow: 0 0 0 10px rgba(244, 63, 94, 0.12); }
+        100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.0); }
+      }
+      .kyber-pulse {
+        animation: kyberPulse 1.4s ease-in-out infinite;
+        will-change: transform, box-shadow;
+      }
+    </style>
+    <div
+      class="pointer-events-none fixed inset-0 opacity-40"
+      aria-hidden="true"
+    >
+      <div
+        class="absolute -top-32 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-emerald-500 blur-3xl"
+      ></div>
+      <div
+        class="absolute bottom-0 right-0 h-72 w-72 translate-x-1/3 translate-y-1/3 rounded-full bg-sky-500 blur-3xl"
+      ></div>
+    </div>
+
+    <div style="display:none">F-E-R-D-E-V-S-H-E-I-20-02-26</div>
+    <div class="relative z-10 flex min-h-screen">
+      <aside class="hidden md:flex fixed inset-y-0 left-0 w-60 flex-shrink-0 flex-col border-r border-slate-800 bg-slate-950/90 px-4 py-6">
+        <div class="mb-6">
+          <div class="flex items-center gap-3">
+            <div>
+              <div class="text-sm font-semibold tracking-wide">
+                KYBER
+                <span class="ml-1 text-xs font-normal text-emerald-400"
+                  >v1.0</span
+                >
+              </div>
+              <div class="text-xs text-slate-400">
+                Agente autónomo de correo con IA
+              </div>
+            </div>
+          </div>
+        </div>
+        <nav class="mt-4 space-y-1 text-sm">
+          <a href="/?view=dashboard" class="block rounded-md px-3 py-2 {% if view == 'dashboard' %}bg-slate-800 text-slate-100{% else %}text-slate-300 hover:bg-slate-800/60{% endif %}">Dashboard</a>
+          <a href="/?view=rules" class="block rounded-md px-3 py-2 {% if view == 'rules' %}bg-slate-800 text-slate-100{% else %}text-slate-300 hover:bg-slate-800/60{% endif %}">Reglas de IA</a>
+          <a href="/?view=respuestas" class="block rounded-md px-3 py-2 {% if view == 'respuestas' %}bg-slate-800 text-slate-100{% else %}text-slate-300 hover:bg-slate-800/60{% endif %}">Respuestas</a>
+        </nav>
+      </aside>
+
+      <div class="flex min-h-screen flex-1 flex-col md:ml-60">
+        <header class="border-b border-slate-800 bg-slate-950/70 backdrop-blur">
+          <div class="flex items-center px-6 py-4">
+            <div class="flex items-center gap-3 md:hidden">
+              <div>
+                <div class="text-sm font-semibold tracking-wide">
+                  KYBER
+                  <span class="ml-1 text-xs font-normal text-emerald-400"
+                    >v1.0</span
+                  >
+                </div>
+                <div class="text-xs text-slate-400">
+                  Agente autónomo de correo con IA
+                </div>
+              </div>
+            </div>
+            <div class="ml-auto flex items-center gap-4">
+              {% if user %}
+              <div class="relative">
+                <button
+                  type="button"
+                  class="flex items-center gap-3 rounded-full border border-slate-700 bg-slate-900/80 px-4 py-1.5 text-xs text-slate-100 shadow-sm hover:bg-slate-800"
+                  onclick="toggleUserMenu()"
+                >
+                  <span class="max-w-[160px] truncate text-left">
+                    {{ user.username }}
+                  </span>
+                  <span
+                    class="flex h-8 w-8 items-center justify-center rounded-full bg-slate-600 text-sm font-semibold"
+                  >
+                    {{ user.initial }}
+                  </span>
+                </button>
+                <div
+                  id="user-menu"
+                  class="absolute right-0 mt-2 hidden w-40 rounded-md border border-slate-800 bg-slate-950/95 p-2 text-xs shadow-xl"
+                >
+                  <form method="post" action="/auth/logout">
+                    <button
+                      type="submit"
+                      class="w-full rounded-md bg-slate-900 px-3 py-2 text-left text-slate-100 hover:bg-red-600 hover:text-white"
+                    >
+                      Cerrar sesión
+                    </button>
+                  </form>
+                </div>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+        </header>
+
+        <main class="flex-1 overflow-y-auto">
+          <div class="px-6 py-8">
+            {% block content %}{% endblock %}
+          </div>
+        </main>
+
+        <footer class="px-6 pb-6 text-xs text-slate-500">
+          Panel local · Datos en tu máquina · Pensado para flujo real de correo
+        </footer>
+      </div>
+    </div>
+    <script>
+      function toggleUserMenu() {
+        const menu = document.getElementById("user-menu");
+        if (!menu) return;
+        menu.classList.toggle("hidden");
+      }
+      window.addEventListener("click", function (e) {
+        const menu = document.getElementById("user-menu");
+        if (!menu) return;
+        const button = e.target.closest("button");
+        if (button && button.getAttribute("onclick") === "toggleUserMenu()") {
+          return;
+        }
+        if (!e.target.closest("#user-menu") && !e.target.closest("button")) {
+          menu.classList.add("hidden");
+        }
+      });
+    </script>
+    {% block scripts %}{% endblock %}
+  </body>
+</html>

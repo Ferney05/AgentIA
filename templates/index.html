@@ -1,0 +1,1138 @@
+{% extends "base.html" %}
+
+{% block title %}KYBER · Panel{% endblock %}
+
+{% block content %}
+  {% if view == 'dashboard' %}
+  <section class="mb-6">
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+      <div class="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <h2 class="text-sm font-semibold text-slate-100">
+            Traductor rápido
+          </h2>
+          <p class="mt-1 text-xs text-slate-400">
+            Traduce texto entre español e inglés para ajustar correos o respuestas.
+          </p>
+        </div>
+        <div>
+          <select
+            id="translate-direction"
+            class="rounded-md border border-slate-700 bg-slate-900/80 px-2 py-1 text-xs text-slate-100"
+          >
+            <option value="en_es">Inglés → Español</option>
+            <option value="es_en">Español → Inglés</option>
+          </select>
+        </div>
+      </div>
+      <form id="translate-form" class="grid gap-3 md:grid-cols-2">
+        <div class="flex flex-col gap-2">
+          <label class="text-xs font-medium text-slate-300">
+            Texto original
+          </label>
+          <textarea
+            id="translate-input"
+            name="texto"
+            rows="4"
+            class="min-h-[120px] w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            placeholder="Pegue aquí el texto a traducir..."
+          ></textarea>
+        </div>
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-medium text-slate-300">Traducción</label>
+            <button id="translate-copy" type="button" class="rounded-md border border-slate-700 bg-slate-900/80 px-2 py-1 text-[11px] font-semibold text-slate-100 hover:bg-slate-800">Copiar</button>
+          </div>
+          <textarea
+            id="translate-output"
+            rows="4"
+            readonly
+            class="min-h-[120px] w-full rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-200"
+            placeholder="Aquí aparecerá la traducción..."
+          ></textarea>
+        </div>
+        <div class="md:col-span-2 flex justify-end">
+          <button
+            id="translate-submit"
+            type="submit"
+            class="hidden inline-flex items-center gap-2 rounded-lg bg-sky-500/90 px-4 py-2 text-xs font-semibold text-slate-950 shadow-lg shadow-sky-500/30 hover:bg-sky-400"
+          >
+            Traducir
+          </button>
+        </div>
+      </form>
+    </div>
+  </section>
+  <section class="mb-10">
+      <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div>
+        <h1 class="text-3xl font-semibold tracking-tight">
+          Panel de control
+        </h1>
+        <p class="mt-1 text-sm text-slate-400">
+          Revisa el estado del agente, sus reglas y el historial de acciones.
+        </p>
+      </div>
+      <div class="flex gap-3">
+        <form action="/scan" method="post" onsubmit="return kyberScanOnce(this);">
+          <button
+            id="btn-scan-once"
+            type="submit"
+            class="inline-flex items-center gap-2 rounded-lg bg-emerald-500/90 px-4 py-2 text-xs font-semibold text-slate-950 shadow-lg shadow-emerald-500/30 hover:bg-emerald-400"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
+              <path fill="#020617" d="M8 5v14l11-7z"/>
+            </svg>
+            Escanear una vez
+          </button>
+        </form>
+        <button
+          id="kyber-toggle"
+          type="button"
+          class="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-100 shadow hover:bg-slate-700"
+        >
+          <span id="kyber-toggle-icon"></span>
+          <span id="kyber-toggle-text">Ejecutar</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section class="mb-10 grid gap-4 md:grid-cols-2">
+
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+      <div class="text-xs font-medium uppercase tracking-wide text-slate-400">
+        Borradores creados
+      </div>
+      <div class="mt-2 flex items-end justify-between">
+        <div class="text-3xl font-semibold">
+          {{ stats.borradores if stats.borradores is not none else 0 }}
+        </div>
+      </div>
+    </div>
+
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+      <div class="text-xs font-medium uppercase tracking-wide text-slate-400">
+        Reglas activas
+      </div>
+      <div class="mt-2 flex items-end justify-between">
+        <div class="text-3xl font-semibold">
+          {{ reglas|length }}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Se eliminaron los gráficos circulares -->
+
+  <section class="mb-10">
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <h2 class="text-sm font-semibold text-slate-100">
+            Borradores por periodo
+          </h2>
+          <p class="mt-1 text-xs text-slate-400">
+            Evolución de borradores creados agrupados por día, semana o mes.
+          </p>
+        </div>
+        <form method="get" action="/" class="flex items-center gap-2">
+          <input type="hidden" name="view" value="dashboard" />
+          <label class="text-xs text-slate-400">Periodo</label>
+          <select
+            name="periodo"
+            class="rounded-md border border-slate-700 bg-slate-900/80 px-2 py-1 text-xs text-slate-100"
+            onchange="this.form.submit()"
+          >
+            <option value="diario" {% if periodo == 'diario' %}selected{% endif %}>Diario</option>
+            <option value="semanal" {% if periodo == 'semanal' %}selected{% endif %}>Semanal</option>
+            <option value="mensual" {% if periodo == 'mensual' %}selected{% endif %}>Mensual</option>
+          </select>
+        </form>
+      </div>
+      <div class="mt-4 h-56">
+        <canvas
+          id="chart-borradores-periodo"
+          data-puntos='{{ borradores_periodo|tojson }}'
+        ></canvas>
+      </div>
+    </div>
+  </section>
+  <div
+    id="logs-clear-modal"
+    class="fixed inset-0 z-40 hidden flex items-center justify-center"
+  >
+    <div
+      id="logs-clear-overlay"
+      class="absolute inset-0 bg-slate-950/70 backdrop-blur-sm"
+    ></div>
+    <div
+      class="relative z-10 w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900/95 p-6 shadow-2xl"
+    >
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h3 class="text-sm font-semibold text-slate-100">
+            Limpiar historial
+          </h3>
+          <p class="mt-1 text-xs text-slate-400">
+            Puedes eliminar solo los registros que coinciden con los filtros
+            actuales o todo el historial completo.
+          </p>
+        </div>
+        <button
+          type="button"
+          data-logs-clear-close
+          class="rounded-full bg-slate-800 p-1 text-slate-400 hover:bg-slate-700"
+        >
+          ✕
+        </button>
+      </div>
+      <div class="mt-4 space-y-3 text-xs text-slate-300">
+        <p>
+          Esta acción solo afecta el historial visual del panel. No modifica
+          correos de Gmail ni borra borradores creados.
+        </p>
+      </div>
+      <div class="mt-5 flex justify-end gap-2 text-xs">
+        <button
+          id="logs-clear-filtered"
+          type="button"
+          class="inline-flex items-center rounded-lg bg-amber-500/90 px-3 py-1.5 font-semibold text-slate-950 shadow-sm shadow-amber-500/40 hover:bg-amber-400"
+        >
+          Limpiar registros filtrados
+        </button>
+        <button
+          id="logs-clear-all"
+          type="button"
+          class="inline-flex items-center rounded-lg bg-rose-500/90 px-3 py-1.5 font-semibold text-slate-50 shadow-sm shadow-rose-500/40 hover:bg-rose-500"
+        >
+          Limpiar todo el historial
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <section class="mb-10">
+    <div class="hidden rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <h2 class="text-sm font-semibold text-slate-100">
+            Reglas de educación de la IA
+          </h2>
+          <p class="mt-1 text-xs text-slate-400">
+            Define el tono, estilo y políticas que KYBER usará al redactar correos.
+          </p>
+        </div>
+        {% if regla_editar %}
+          <span class="rounded-full bg-amber-500/10 px-3 py-1 text-[10px] font-medium text-amber-300">
+            Editando regla #{{ regla_editar[0] }}
+          </span>
+        {% endif %}
+      </div>
+
+      <form method="post" action="/learn" class="mt-4 space-y-3">
+        {% if regla_editar %}
+          <input type="hidden" name="regla_id" value="{{ regla_editar[0] }}" />
+        {% endif %}
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-300">
+            Clave
+          </label>
+          <input
+            type="text"
+            name="clave"
+            required
+            class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            placeholder="Escribe un nombre para la regla (ej. Persona)"
+            value="{% if regla_editar %}{{ regla_editar[1] }}{% endif %}"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-300">
+            Instrucción
+          </label>
+          <textarea
+            name="instruccion"
+            required
+            rows="4"
+            class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            placeholder="Describe cómo debe responder KYBER (tono, idioma, prioridades)."
+          >{% if regla_editar %}{{ regla_editar[2] }}{% endif %}</textarea>
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-300">
+            Prioridad
+          </label>
+          <select
+            name="prioridad"
+            class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          >
+            {% if not regla_editar %}
+              <option value="auto" selected>Auto</option>
+            {% else %}
+              <option value="auto">Auto</option>
+            {% endif %}
+            {% for p in [5,4,3,2,1] %}
+              <option value="{{ p }}" {% if regla_editar and regla_editar[3] == p %}selected{% endif %}>{{ p }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-300">Tipo</label>
+            <select name="tipo" class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100">
+              {% set tipo_actual = regla_editar[4] if regla_editar else 'negocio' %}
+              <option value="negocio" {% if tipo_actual == 'negocio' %}selected{% endif %}>Regla de negocio</option>
+              <option value="tarea" {% if tipo_actual == 'tarea' %}selected{% endif %}>Tarea</option>
+              <option value="politica" {% if tipo_actual == 'politica' %}selected{% endif %}>Política</option>
+            </select>
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-300">Etiquetas</label>
+            <input type="text" name="etiquetas" class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100" placeholder="ej. cotizaciones, idioma" value="{% if regla_editar %}{{ regla_editar[5] }}{% endif %}" />
+          </div>
+        </div>
+        <div class="flex justify-end gap-2">
+          {% if regla_editar %}
+            <a
+              href="/"
+              class="inline-flex items-center rounded-lg border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800"
+            >
+              Cancelar
+            </a>
+          {% endif %}
+          <button
+            type="submit"
+            class="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-sky-500 px-4 py-2 text-xs font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 hover:from-emerald-400 hover:to-sky-400"
+          >
+            {% if regla_editar %}Actualizar regla{% else %}Guardar regla{% endif %}
+          </button>
+        </div>
+      </form>
+
+      <div class="mt-6 space-y-2">
+        {% for id, clave, instruccion, prioridad, tipo, etiquetas, es_principal in reglas %}
+          <div class="rounded-lg border border-slate-800 bg-slate-900/80 p-3">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="text-xs font-semibold text-emerald-300">
+                  {{ clave }}
+                </div>
+                <div class="mt-1 text-xs text-slate-300 line-clamp-3">
+                  {{ instruccion }}
+                </div>
+                <div class="mt-2 flex flex-wrap gap-1">
+                  {% if etiquetas %}
+                    {% for tag in etiquetas.split(",") %}
+                      <span class="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-300">{{ tag.strip() }}</span>
+                    {% endfor %}
+                  {% endif %}
+                </div>
+              </div>
+              <div class="flex gap-1">
+                <span class="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
+                  P{{ prioridad }}
+                </span>
+                <span class="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
+                  {% if tipo == 'tarea' %}Tarea{% elif tipo == 'politica' %}Política{% else %}Negocio{% endif %}
+                </span>
+                <form method="get" action="/" class="inline">
+                  <input type="hidden" name="edit_id" value="{{ id }}" />
+                  <button
+                    type="submit"
+                    class="rounded-md bg-slate-800/80 p-1 text-sky-400 hover:bg-slate-700"
+                    title="Editar regla"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24">
+                      <path fill="#0891b2" d="M5 21q-.825 0-1.412-.587T3 19V5q0-.825.588-1.412T5 3h8.925l-2 2H5v14h14v-6.95l2-2V19q0 .825-.587 1.413T19 21zm4-6v-4.25l9.175-9.175q.3-.3.675-.45t.75-.15q.4 0 .763.15t.662.45L22.425 3q.275.3.425.663T23 4.4t-.137.738t-.438.662L13.25 15zM21.025 4.4l-1.4-1.4zM11 13h1.4l5.8-5.8l-.7-.7l-.725-.7L11 11.575zm6.5-6.5l-.725-.7zl.7.7z"/>
+                    </svg>
+                  </button>
+                </form>
+                <form method="post" action="/rules/{{ id }}/delete" class="inline">
+                  <button
+                    type="submit"
+                    class="rounded-md bg-slate-800/80 p-1 text-rose-500 hover:bg-slate-800"
+                    title="Eliminar regla"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24">
+                      <path fill="#e11d48" d="M7 21q-.825 0-1.412-.587T5 19V6H4V4h5V3h6v1h5v2h-1v13q0 .825-.587 1.413T17 21zM17 6H7v13h10zM9 17h2V8H9zm4 0h2V8h-2zM7 6v13z"/>
+                    </svg>
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        {% else %}
+          <p class="text-xs text-slate-500">
+            Aún no hay reglas. Crea la primera para educar a KYBER.
+          </p>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h2 class="text-sm font-semibold text-slate-100">
+            Historial reciente
+          </h2>
+          <p class="mt-1 text-xs text-slate-400">
+            Vista rápida de las decisiones que ha tomado el agente.
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            id="logs-clear-open"
+            type="button"
+            class="inline-flex items-center gap-1 rounded-lg bg-slate-800 px-3 py-1.5 text-[11px] font-semibold text-slate-100 hover:bg-slate-700"
+          >
+            Limpiar historial
+          </button>
+        </div>
+      </div>
+
+      <form
+        method="get"
+        action="/"
+        class="mt-4 flex flex-wrap items-end gap-3 text-xs"
+      >
+        <input type="hidden" name="view" value="dashboard" />
+        <input type="hidden" name="periodo" value="{{ periodo }}" />
+        <input type="hidden" name="page" value="1" />
+        <div>
+          <label class="mb-1 block font-medium text-slate-400">
+            Categoría
+          </label>
+          <select
+            name="filtro_categoria"
+            class="rounded-md border border-slate-700 bg-slate-900/80 px-2 py-1 text-xs text-slate-100"
+          >
+            <option value="" {% if not filtro_categoria %}selected{% endif %}>
+              Todas
+            </option>
+            <option value="GENERAL" {% if filtro_categoria == 'GENERAL' %}selected{% endif %}>
+              General
+            </option>
+            <option value="COTIZACIONES" {% if filtro_categoria == 'COTIZACIONES' %}selected{% endif %}>
+              Cotizaciones
+            </option>
+            <option value="ANUNCIO" {% if filtro_categoria == 'ANUNCIO' %}selected{% endif %}>
+              Anuncio
+            </option>
+          </select>
+        </div>
+        <div>
+          <label class="mb-1 block font-medium text-slate-400">
+            Acción
+          </label>
+          <select
+            name="filtro_accion"
+            class="rounded-md border border-slate-700 bg-slate-900/80 px-2 py-1 text-xs text-slate-100"
+          >
+            <option value="" {% if not filtro_accion %}selected{% endif %}>
+              Todas
+            </option>
+            <option value="BORRADOR" {% if filtro_accion == 'BORRADOR' %}selected{% endif %}>
+              Borrador creado
+            </option>
+            <option value="NADA" {% if filtro_accion == 'NADA' %}selected{% endif %}>
+              Sin acción
+            </option>
+            <option value="OMITIDO_BORRADOR_THREAD" {% if filtro_accion == 'OMITIDO_BORRADOR_THREAD' %}selected{% endif %}>
+              Omitido por hilo
+            </option>
+            <option value="OMITIDO_BORRADOR_MSG" {% if filtro_accion == 'OMITIDO_BORRADOR_MSG' %}selected{% endif %}>
+              Omitido por mensaje
+            </option>
+          </select>
+        </div>
+        <div class="flex gap-2">
+          <button
+            type="submit"
+            class="inline-flex items-center rounded-lg bg-emerald-500/90 px-3 py-1.5 text-[11px] font-semibold text-slate-950 shadow-sm shadow-emerald-500/30 hover:bg-emerald-400"
+          >
+            Aplicar filtros
+          </button>
+        </div>
+      </form>
+
+      <div class="mt-4 overflow-x-auto rounded-xl border border-slate-800">
+        <table class="w-full table-fixed divide-y divide-slate-800 text-xs">
+          <thead class="bg-slate-900/80 text-slate-400">
+            <tr>
+              <th class="px-3 py-2 text-left font-medium">Fecha</th>
+              <th class="px-3 py-2 text-left font-medium">Remitente</th>
+              <th class="px-3 py-2 text-left font-medium">Asunto</th>
+              <th class="px-3 py-2 text-left font-medium">Detalle</th>
+              <th class="px-3 py-2 text-left font-medium">Categoría</th>
+              <th class="px-3 py-2 text-left font-medium">Acción</th>
+              <th class="px-3 py-2 text-left font-medium">Idioma</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800">
+            {% for fecha, remitente, asunto, resumen, accion, idioma, categoria in logs %}
+              <tr class="hover:bg-slate-900/80">
+                <td class="px-3 py-2 text-slate-300 whitespace-nowrap">
+                  {{ fecha }}
+                </td>
+                <td class="px-3 py-2 text-slate-300 break-words">
+                  {{ remitente or "—" }}
+                </td>
+                <td class="px-3 py-2 text-slate-300 break-words">
+                  {{ asunto or "—" }}
+                </td>
+                <td class="px-3 py-2 text-[11px] text-slate-400 break-words">
+                  {{ resumen or "—" }}
+                </td>
+                <td class="px-3 py-2">
+                  <span
+                    class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold
+                    {% if categoria == 'COTIZACIONES' %}
+                      bg-sky-500/15 text-sky-300
+                    {% else %}
+                      bg-emerald-500/10 text-emerald-300
+                    {% endif %}"
+                  >
+                    {{ categoria or "GENERAL" }}
+                  </span>
+                </td>
+                <td class="px-3 py-2">
+                  <span
+                    class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold
+                    {% if accion == 'BORRADOR' %}
+                      bg-emerald-500/15 text-emerald-300
+                    {% elif accion and accion.startswith('OMITIDO_') %}
+                      bg-amber-500/15 text-amber-300
+                    {% else %}
+                      bg-slate-800 text-slate-200
+                    {% endif %}"
+                  >
+                    {% if accion == 'BORRADOR' %}
+                      Borrador
+                    {% elif accion == 'OMITIDO_BORRADOR_THREAD' %}
+                      Omitido (borrador en hilo)
+                    {% elif accion == 'OMITIDO_BORRADOR_MSG' %}
+                      Omitido (borrador en mensaje)
+                    {% else %}
+                      Sin acción
+                    {% endif %}
+                  </span>
+                </td>
+                <td class="px-3 py-2 text-slate-300 break-words">
+                  {{ idioma or "—" }}
+                </td>
+              </tr>
+            {% else %}
+              <tr>
+                <td
+                  colspan="7"
+                  class="px-3 py-4 text-center text-xs text-slate-500"
+                >
+                  Aún no hay registros en el historial.
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <div class="flex items-center justify-between border-t border-slate-800 bg-slate-950/40 px-3 py-2 text-[11px] text-slate-400">
+          {% set start = ((page - 1) * page_size) + 1 if total_logs > 0 else 0 %}
+          {% set end = (page * page_size) if (page * page_size) < total_logs else total_logs %}
+          <div>
+            {% if total_logs > 0 %}
+              Mostrando {{ start }}–{{ end }} de {{ total_logs }} registros
+            {% else %}
+              Sin registros para los filtros actuales
+            {% endif %}
+          </div>
+          <div class="flex items-center gap-2">
+            {% if has_prev %}
+              <a
+                href="/?view=dashboard&periodo={{ periodo }}&page={{ page - 1 }}{% if filtro_categoria %}&filtro_categoria={{ filtro_categoria }}{% endif %}{% if filtro_accion %}&filtro_accion={{ filtro_accion }}{% endif %}"
+                class="rounded-md border border-slate-700 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800"
+              >
+                ← Anterior
+              </a>
+            {% endif %}
+            {% if has_next %}
+              <a
+                href="/?view=dashboard&periodo={{ periodo }}&page={{ page + 1 }}{% if filtro_categoria %}&filtro_categoria={{ filtro_categoria }}{% endif %}{% if filtro_accion %}&filtro_accion={{ filtro_accion }}{% endif %}"
+                class="rounded-md border border-slate-700 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800"
+              >
+                Siguiente →
+              </a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  {% elif view == 'rules' %}
+  <section class="mb-10">
+    <div class="flex items-center justify-between gap-3">
+      <div>
+        <h1 class="text-3xl font-semibold tracking-tight">Reglas de IA</h1>
+        <p class="mt-1 text-sm text-slate-400">Administra las reglas que educan a KYBER.</p>
+      </div>
+    </div>
+    <div class="mt-6 grid gap-8 lg:grid-cols-2">
+      <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <form method="post" action="/learn" class="space-y-3">
+          {% if regla_editar %}
+            <input type="hidden" name="regla_id" value="{{ regla_editar[0] }}" />
+          {% endif %}
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-300">Clave</label>
+            <input type="text" name="clave" class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500" placeholder="ej. Tono general" value="{% if regla_editar %}{{ regla_editar[1] }}{% endif %}" />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-300">Instrucción</label>
+            <textarea name="instruccion" required rows="4" class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">{% if regla_editar %}{{ regla_editar[2] }}{% endif %}</textarea>
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-300">Prioridad</label>
+            <select name="prioridad" class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+              {% if not regla_editar %}
+                <option value="auto" selected>Auto</option>
+              {% else %}
+                <option value="auto">Auto</option>
+              {% endif %}
+              {% for p in [5,4,3,2,1] %}
+                <option value="{{ p }}" {% if regla_editar and regla_editar[3] == p %}selected{% endif %}>{{ p }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label class="mb-1 block text-xs font-medium text-slate-300">Tipo</label>
+              <select name="tipo" class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100">
+                {% set tipo_actual = regla_editar[4] if regla_editar else 'negocio' %}
+                <option value="negocio" {% if tipo_actual == 'negocio' %}selected{% endif %}>Regla de negocio</option>
+                <option value="tarea" {% if tipo_actual == 'tarea' %}selected{% endif %}>Tarea</option>
+                <option value="politica" {% if tipo_actual == 'politica' %}selected{% endif %}>Política</option>
+              </select>
+            </div>
+            <div>
+              <label class="mb-1 block text-xs font-medium text-slate-300">Etiquetas</label>
+              <input type="text" name="etiquetas" class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100" placeholder="ej. cotizaciones, idioma" value="{% if regla_editar %}{{ regla_editar[5] }}{% endif %}" />
+            </div>
+          </div>
+          <div class="flex justify-end gap-2">
+            {% if regla_editar %}
+              <a href="/?view=rules" class="inline-flex items-center rounded-lg border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800">
+                Cancelar
+              </a>
+            {% endif %}
+            <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-sky-500 px-4 py-2 text-xs font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 hover:from-emerald-400 hover:to-sky-400">
+              {% if regla_editar %}Actualizar regla{% else %}Guardar regla{% endif %}
+            </button>
+          </div>
+        </form>
+      </div>
+      <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <div class="mt-2 space-y-2">
+          {% for id, clave, instruccion, prioridad, tipo, etiquetas, es_principal in reglas %}
+            <div class="rounded-lg border border-slate-800 bg-slate-900/80 p-3">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <div class="text-xs font-semibold text-emerald-300">{{ clave }}</div>
+                  <div class="mt-1 text-xs text-slate-300 line-clamp-3">{{ instruccion }}</div>
+                  <div class="mt-2 flex flex-wrap gap-1">
+                    {% if etiquetas %}
+                      {% for tag in etiquetas.split(",") %}
+                        <span class="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-300">{{ tag.strip() }}</span>
+                      {% endfor %}
+                    {% endif %}
+                  </div>
+                </div>
+                <div class="flex gap-1">
+                  <span class="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-300">P{{ prioridad }}</span>
+                  <span class="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
+                    {% if tipo == 'tarea' %}Tarea{% elif tipo == 'politica' %}Política{% else %}Negocio{% endif %}
+                  </span>
+                  <form method="get" action="/" class="inline">
+                    <input type="hidden" name="edit_id" value="{{ id }}" />
+                    <input type="hidden" name="view" value="rules" />
+                    <button type="submit" class="rounded-md bg-slate-800/80 p-1 text-sky-400 hover:bg-slate-700" title="Editar regla">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path fill="#0891b2" d="M5 21q-.825 0-1.412-.587T3 19V5q0-.825.588-1.412T5 3h8.925l-2 2H5v14h14v-6.95l2-2V19q0 .825-.587 1.413T19 21zm4-6v-4.25l9.175-9.175q.3-.3.675-.45t.75-.15q.4 0 .763.15t.662.45L22.425 3q.275.3.425.663T23 4.4t-.137.738t-.438.662L13.25 15zM21.025 4.4l-1.4-1.4zM11 13h1.4l5.8-5.8l-.7-.7l-.725-.7L11 11.575zm6.5-6.5l-.725-.7zl.7.7z"/></svg>
+                    </button>
+                  </form>
+                  <form method="post" action="/rules/{{ id }}/delete" class="inline">
+                    <button type="submit" class="rounded-md bg-slate-800/80 p-1 text-rose-500 hover:bg-slate-800" title="Eliminar regla">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path fill="#e11d48" d="M7 21q-.825 0-1.412-.587T5 19V6H4V4h5V3h6v1h5v2h-1v13q0 .825-.587 1.413T17 21zM17 6H7v13h10zM9 17h2V8H9zm4 0h2V8h-2zM7 6v13z"/></svg>
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          {% else %}
+            <p class="text-xs text-slate-500">Aún no hay reglas.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </section>
+  {% elif view == 'respuestas' %}
+  <section class="mb-10">
+    <div class="flex items-center justify-between gap-3">
+      <div>
+        <h1 class="text-3xl font-semibold tracking-tight">Respuestas</h1>
+        <p class="mt-1 text-sm text-slate-400">Plantillas rápidas para contestar clientes.</p>
+        <p class="mt-1 text-xs text-emerald-300">
+          La IA prioriza estas respuestas y las usará tal cual cuando coincidan con lo que el cliente pregunta.
+        </p>
+      </div>
+    </div>
+    <div class="mt-6 grid gap-8 lg:grid-cols-2">
+      <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <form method="post" action="/respuestas" class="space-y-3">
+          {% if respuesta_editar %}
+            <input type="hidden" name="respuesta_id" value="{{ respuesta_editar[0] }}" />
+          {% endif %}
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-300">Título</label>
+            <input type="text" name="titulo" required class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500" placeholder="ej. Respuesta de cotización" value="{% if respuesta_editar %}{{ respuesta_editar[1] }}{% endif %}" />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-300">Contenido</label>
+            <textarea name="contenido" required rows="6" class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">{% if respuesta_editar %}{{ respuesta_editar[2] }}{% endif %}</textarea>
+          </div>
+          <div class="flex justify-end gap-2">
+            {% if respuesta_editar %}
+              <a href="/?view=respuestas" class="inline-flex items-center rounded-lg border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800">
+                Cancelar
+              </a>
+            {% endif %}
+            <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-sky-500 px-4 py-2 text-xs font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 hover:from-emerald-400 hover:to-sky-400">
+              {% if respuesta_editar %}Actualizar respuesta{% else %}Guardar respuesta{% endif %}
+            </button>
+          </div>
+        </form>
+      </div>
+      <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <div class="mt-2 space-y-2">
+          {% for id, titulo, contenido in respuestas %}
+            <div class="rounded-lg border border-slate-800 bg-slate-900/80 p-3">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <div class="truncate text-xs font-semibold text-emerald-300">{{ titulo }}</div>
+                  <div class="mt-1 text-xs text-slate-300 line-clamp-3">{{ contenido }}</div>
+                </div>
+                <div class="flex gap-1">
+                  <form method="get" action="/" class="inline">
+                    <input type="hidden" name="edit_respuesta_id" value="{{ id }}" />
+                    <input type="hidden" name="view" value="respuestas" />
+                    <button type="submit" class="rounded-md bg-slate-800/80 p-1 text-sky-400 hover:bg-slate-700" title="Editar respuesta">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path fill="#0891b2" d="M5 21q-.825 0-1.412-.587T3 19V5q0-.825.588-1.412T5 3h8.925l-2 2H5v14h14v-6.95l2-2V19q0 .825-.587 1.413T19 21zm4-6v-4.25l9.175-9.175q.3-.3.675-.45t.75-.15q.4 0 .763.15t.662.45L22.425 3q.275.3.425.663T23 4.4t-.137.738t-.438.662L13.25 15zM21.025 4.4l-1.4-1.4zM11 13h1.4l5.8-5.8l-.7-.7l-.725-.7L11 11.575zm6.5-6.5l-.725-.7zl.7.7z"/></svg>
+                    </button>
+                  </form>
+                  <form method="post" action="/respuestas/{{ id }}/delete" class="inline">
+                    <button type="submit" class="rounded-md bg-slate-800/80 p-1 text-rose-500 hover:bg-slate-800" title="Eliminar respuesta">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path fill="#e11d48" d="M7 21q-.825 0-1.412-.587T5 19V6H4V4h5V3h6v1h5v2h-1v13q0 .825-.587 1.413T17 21zM17 6H7v13h10zM9 17h2V8H9zm4 0h2V8h-2zM7 6v13z"/></svg>
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          {% else %}
+            <p class="text-xs text-slate-500">Aún no hay respuestas.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    const SHEI_SIGNATURE = "F-E-R-D-E-V-S-H-E-I-20-02-26";
+    const accionesCtx = null;
+    const categoriasCtx = null;
+    const borradoresPeriodoCanvas = document.getElementById("chart-borradores-periodo");
+
+    // Se eliminaron los gráficos circulares
+
+    if (borradoresPeriodoCanvas && window.Chart) {
+      let bp = [];
+      try {
+        bp = JSON.parse(borradoresPeriodoCanvas.dataset.puntos || "[]");
+      } catch (e) {
+        bp = [];
+      }
+      const labelsBP = bp.map(function (x) { return String(x[0]); });
+      const dataBP = bp.map(function (x) { return Number(x[1]); });
+      if (labelsBP.length > 0) {
+        new Chart(borradoresPeriodoCanvas, {
+          type: "line",
+          data: {
+            labels: labelsBP,
+            datasets: [
+              {
+                label: "Borradores",
+                data: dataBP,
+                borderColor: "#22c55e",
+                backgroundColor: "rgba(34,197,94,0.15)",
+                tension: 0.25,
+                fill: true,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: {
+                display: true,
+                labels: { color: "#cbd5f5", font: { size: 10 } },
+              },
+            },
+            scales: {
+              x: { ticks: { color: "#93c5fd" }, grid: { color: "#1f2937" } },
+              y: { ticks: { color: "#93c5fd" }, grid: { color: "#1f2937" } },
+            },
+          },
+        });
+      }
+    }
+
+    (function () {
+      if (typeof Toastify === "undefined") return;
+      const params = new URLSearchParams(window.location.search);
+      const toast = params.get("toast");
+      if (!toast) return;
+
+      let text = "";
+      let bg = "linear-gradient(to right, #22c55e, #14b8a6)";
+
+      if (toast === "regla_creada") {
+        text = "Regla creada correctamente";
+      } else if (toast === "regla_editada") {
+        text = "Regla actualizada correctamente";
+      } else if (toast === "regla_eliminada") {
+        text = "Regla eliminada";
+        bg = "linear-gradient(to right, #f97373, #e11d48)";
+      } else if (toast === "scan_ok") {
+        text = "Escaneo completado";
+      } else if (toast === "respuesta_creada") {
+        text = "Respuesta guardada";
+      } else if (toast === "respuesta_editada") {
+        text = "Respuesta actualizada";
+      } else if (toast === "respuesta_eliminada") {
+        text = "Respuesta eliminada";
+        bg = "linear-gradient(to right, #f97373, #e11d48)";
+      } else {
+        return;
+      }
+
+      Toastify({
+        text,
+        duration: 4000,
+        gravity: "top",
+        position: "right",
+        close: true,
+        stopOnFocus: true,
+        style: {
+          background: bg,
+        },
+      }).showToast();
+    })();
+
+    function kyberScanOnce(form) {
+      var btn = document.getElementById("btn-scan-once");
+      if (!btn) return true;
+      if (btn.dataset.loading === "1") {
+        return false;
+      }
+      btn.dataset.loading = "1";
+      btn.disabled = true;
+      btn.classList.add("opacity-70", "cursor-not-allowed");
+      var originalHtml = btn.innerHTML;
+      btn.dataset.original = originalHtml;
+      btn.innerHTML =
+        '<span class="inline-flex items-center gap-2"><span class="h-3 w-3 animate-spin rounded-full border border-slate-900 border-t-slate-50"></span>Ejecutando…</span>';
+      return true;
+    }
+
+    (function () {
+      const btn = document.getElementById("kyber-toggle");
+      const iconSpan = document.getElementById("kyber-toggle-icon");
+      const textSpan = document.getElementById("kyber-toggle-text");
+      if (!btn || !iconSpan || !textSpan) return;
+
+      let running = false;
+
+      function render() {
+        if (running) {
+          iconSpan.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><path fill="#e5e7eb" d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>';
+          textSpan.textContent = "Pausar";
+          btn.classList.remove("bg-slate-800", "text-slate-100");
+          btn.classList.add("bg-rose-500/90", "text-slate-950", "kyber-pulse");
+        } else {
+          iconSpan.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><path fill="#e5e7eb" d="M8 5v14l11-7z"/></svg>';
+          textSpan.textContent = "Ejecutar";
+          btn.classList.remove("bg-rose-500/90", "text-slate-950");
+          btn.classList.remove("kyber-pulse");
+          btn.classList.add("bg-slate-800", "text-slate-100");
+        }
+      }
+
+      async function syncStatus() {
+        try {
+          const res = await fetch("/agent/status");
+          const data = await res.json();
+          running = !!data.running;
+          render();
+        } catch (e) {}
+      }
+
+      btn.addEventListener("click", async function () {
+        try {
+          const res = await fetch("/agent/toggle", { method: "POST" });
+          const data = await res.json();
+          running = !!data.running;
+          render();
+          if (typeof Toastify !== "undefined") {
+            Toastify({
+              text: running ? "KYBER ejecutándose en automático" : "KYBER en pausa",
+              duration: 3000,
+              gravity: "top",
+              position: "right",
+              close: true,
+              style: {
+                background: running
+                  ? "linear-gradient(to right, #22c55e, #14b8a6)"
+                  : "linear-gradient(to right, #4b5563, #020617)",
+              },
+            }).showToast();
+          }
+        } catch (e) {}
+      });
+
+      setInterval(async function () {
+        if (!running) return;
+        try {
+          await fetch("/scan-json", { method: "POST" });
+        } catch (e) {}
+      }, 60000);
+
+      syncStatus();
+      render();
+    })();
+
+    (function () {
+      const form = document.getElementById("translate-form");
+      const input = document.getElementById("translate-input");
+      const output = document.getElementById("translate-output");
+      const dirSelect = document.getElementById("translate-direction");
+      const btn = document.getElementById("translate-submit");
+      const copyBtn = document.getElementById("translate-copy");
+      if (!form || !input || !output || !dirSelect || !btn) return;
+
+      async function doTranslate() {
+        const texto = input.value || "";
+        if (!texto.trim()) return;
+        const direccion = dirSelect.value || "en_es";
+        try {
+          const formData = new FormData();
+          formData.append("texto", texto);
+          formData.append("direccion", direccion);
+          const res = await fetch("/translate-json", { method: "POST", body: formData });
+          const data = await res.json();
+          if (data && data.ok && typeof data.translated === "string") {
+            output.value = data.translated;
+          } else if (data && data.error === "unauthorized") {
+            output.value = "La sesión no está activa. Inicie sesión de nuevo.";
+          } else {
+            output.value = "No se pudo obtener la traducción.";
+          }
+        } catch (e) {
+          output.value = "Error al conectar con el traductor.";
+        }
+      }
+
+      let tId = null;
+      input.addEventListener("input", function () {
+        clearTimeout(tId);
+        tId = setTimeout(doTranslate, 400);
+      });
+      dirSelect.addEventListener("change", function () {
+        if ((input.value || "").trim()) {
+          clearTimeout(tId);
+          tId = setTimeout(doTranslate, 100);
+        }
+      });
+      if (copyBtn) {
+        copyBtn.addEventListener("click", async function () {
+          const txt = output.value || "";
+          if (!txt) return;
+          try {
+            await navigator.clipboard.writeText(txt);
+            if (typeof Toastify !== "undefined") {
+              Toastify({ text: "Traducción copiada", duration: 2000, gravity: "top", position: "right" }).showToast();
+            }
+          } catch (e) {}
+        });
+      }
+    })();
+
+    (function () {
+      const openBtn = document.getElementById("logs-clear-open");
+      const modal = document.getElementById("logs-clear-modal");
+      const overlay = document.getElementById("logs-clear-overlay");
+      const closeBtns = document.querySelectorAll("[data-logs-clear-close]");
+      const filteredBtn = document.getElementById("logs-clear-filtered");
+      const allBtn = document.getElementById("logs-clear-all");
+
+      if (!openBtn || !modal || !overlay || !filteredBtn || !allBtn) {
+        return;
+      }
+
+      function openModal() {
+        modal.classList.remove("hidden");
+      }
+      function closeModal() {
+        modal.classList.add("hidden");
+      }
+
+      openBtn.addEventListener("click", openModal);
+      overlay.addEventListener("click", closeModal);
+      closeBtns.forEach((btn) => {
+        btn.addEventListener("click", closeModal);
+      });
+
+      async function clearLogs(scope) {
+        const catSelect = document.querySelector(
+          'select[name="filtro_categoria"]'
+        );
+        const accSelect = document.querySelector(
+          'select[name="filtro_accion"]'
+        );
+        const filtroCategoria = catSelect ? catSelect.value : "";
+        const filtroAccion = accSelect ? accSelect.value : "";
+
+        try {
+          const formData = new FormData();
+          formData.append("scope", scope);
+          formData.append("filtro_categoria", filtroCategoria);
+          formData.append("filtro_accion", filtroAccion);
+          const res = await fetch("/logs/clear-json", {
+            method: "POST",
+            body: formData,
+          });
+          const data = await res.json();
+          if (data && data.ok) {
+            Toastify({
+              text:
+                data.deleted && data.deleted > 0
+                  ? `Se eliminaron ${data.deleted} registros de historial.`
+                  : "No había registros para eliminar.",
+              duration: 4000,
+              close: true,
+              gravity: "top",
+              position: "right",
+              backgroundColor:
+                "linear-gradient(to right, #22c55e, #0ea5e9)",
+            }).showToast();
+            closeModal();
+            setTimeout(function () {
+              window.location.reload();
+            }, 500);
+          } else if (data && data.error === "unauthorized") {
+            Toastify({
+              text: "Sesión no válida. Inicia sesión nuevamente.",
+              duration: 4000,
+              close: true,
+              gravity: "top",
+              position: "right",
+              backgroundColor: "#f97316",
+            }).showToast();
+          } else {
+            Toastify({
+              text: "No se pudo limpiar el historial.",
+              duration: 4000,
+              close: true,
+              gravity: "top",
+              position: "right",
+              backgroundColor: "#ef4444",
+            }).showToast();
+          }
+        } catch (e) {
+          Toastify({
+            text: "Error de conexión al limpiar historial.",
+            duration: 4000,
+            close: true,
+            gravity: "top",
+            position: "right",
+            backgroundColor: "#ef4444",
+          }).showToast();
+        }
+      }
+
+      filteredBtn.addEventListener("click", function () {
+        clearLogs("filtered");
+      });
+      allBtn.addEventListener("click", function () {
+        clearLogs("all");
+      });
+    })();
+
+    (function () {
+      const claveInput = document.querySelector('input[name="clave"]');
+      const instruccionTextarea = document.querySelector('textarea[name="instruccion"]');
+      const prioridadSelect = document.querySelector('select[name="prioridad"]');
+      const etiquetasInput = document.querySelector('input[name="etiquetas"]');
+      if (!claveInput || !instruccionTextarea) return;
+
+      let prioridadTocada = prioridadSelect && prioridadSelect.value !== "auto";
+      let etiquetasTocadas = etiquetasInput && etiquetasInput.value.trim() !== "";
+      let ultimaAutoEtiquetas = etiquetasInput ? etiquetasInput.value.trim() : "";
+      let debounceId = null;
+
+      if (prioridadSelect) {
+        prioridadSelect.addEventListener("change", function () {
+          prioridadTocada = true;
+        });
+      }
+      if (etiquetasInput) {
+        etiquetasInput.addEventListener("input", function () {
+          etiquetasTocadas = true;
+          ultimaAutoEtiquetas = ""; 
+        });
+      }
+
+      instruccionTextarea.addEventListener("input", function () {
+        const texto = instruccionTextarea.value.trim();
+        if (!texto) return;
+
+        if (debounceId) clearTimeout(debounceId);
+        debounceId = setTimeout(async function () {
+          try {
+            const fd = new FormData();
+            fd.append("instruccion", texto);
+            const res = await fetch("/rules/suggest", { method: "POST", body: fd });
+            const data = await res.json();
+            if (data && data.ok) {
+              const prSug = (data.prioridad || "").toString();
+              if (prioridadSelect && prSug && !prioridadTocada) {
+                prioridadSelect.value = prSug;
+              }
+            }
+            if (etiquetasInput) {
+              const fd2 = new FormData();
+              fd2.append("instruccion", texto);
+              const res2 = await fetch("/rules/tags_suggest", { method: "POST", body: fd2 });
+              const data2 = await res2.json();
+              if (data2 && data2.ok) {
+                const only = (data2.etiqueta || "").trim();
+                if (only && (!etiquetasTocadas || !etiquetasInput.value || etiquetasInput.value === ultimaAutoEtiquetas)) {
+                  etiquetasInput.value = only;
+                  ultimaAutoEtiquetas = only;
+                }
+              }
+            }
+          } catch (e) {}
+        }, 500);
+      });
+    })();
+  </script>
+{% endblock %}
+

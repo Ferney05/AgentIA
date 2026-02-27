@@ -23,25 +23,44 @@ def crear_base_de_datos(nombre_bd: str = "kyber.db") -> None:
     cursor = conn.cursor()
     p = _get_placeholder()
 
-    # Ajustar sintaxis de tipos para PostgreSQL si es necesario
-    serial_type = "SERIAL PRIMARY KEY" if os.environ.get("DATABASE_URL") else "INTEGER PRIMARY KEY AUTOINCREMENT"
+    is_pg = os.environ.get("DATABASE_URL")
 
-    cursor.execute(
-        f"""
-        CREATE TABLE IF NOT EXISTS usuarios (
-            id {serial_type},
-            email TEXT NOT NULL UNIQUE,
-            password_hash TEXT NOT NULL,
-            creado_en TEXT NOT NULL,
-            gemini_api_key TEXT,
-            gmail_user TEXT,
-            gmail_password TEXT,
-            scan_batch INTEGER DEFAULT 10,
-            scan_max INTEGER DEFAULT 100,
-            agente_activo INTEGER DEFAULT 0
+    if is_pg:
+        # PostgreSQL specific table creation
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id SERIAL PRIMARY KEY,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                creado_en TEXT NOT NULL,
+                gemini_api_key TEXT,
+                gmail_user TEXT,
+                gmail_password TEXT,
+                scan_batch INTEGER DEFAULT 10,
+                scan_max INTEGER DEFAULT 100,
+                agente_activo INTEGER DEFAULT 0
+            )
+            """
         )
-        """
-    )
+    else:
+        # SQLite specific table creation
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                creado_en TEXT NOT NULL,
+                gemini_api_key TEXT,
+                gmail_user TEXT,
+                gmail_password TEXT,
+                scan_batch INTEGER DEFAULT 10,
+                scan_max INTEGER DEFAULT 100,
+                agente_activo INTEGER DEFAULT 0
+            )
+            """
+        )
 
     cursor.execute(
         f"""

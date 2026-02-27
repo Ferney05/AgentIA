@@ -23,6 +23,11 @@ def crear_base_de_datos(nombre_bd: str = "kyber.db") -> None:
     cursor = conn.cursor()
     p = _get_placeholder()
 
+def crear_base_de_datos(nombre_bd: str = "kyber.db") -> None:
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+
     is_pg = os.environ.get("DATABASE_URL")
 
     if is_pg:
@@ -40,7 +45,46 @@ def crear_base_de_datos(nombre_bd: str = "kyber.db") -> None:
                 scan_batch INTEGER DEFAULT 10,
                 scan_max INTEGER DEFAULT 100,
                 agente_activo INTEGER DEFAULT 0
-            )
+            );
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS reglas (
+                id SERIAL PRIMARY KEY,
+                clave TEXT NOT NULL,
+                instruccion TEXT NOT NULL,
+                usuario_id INTEGER,
+                prioridad INTEGER,
+                tipo TEXT,
+                etiquetas TEXT,
+                es_principal INTEGER
+            );
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS logs (
+                id SERIAL PRIMARY KEY,
+                fecha TEXT NOT NULL,
+                remitente TEXT,
+                asunto TEXT,
+                resumen TEXT,
+                accion TEXT,
+                idioma TEXT,
+                categoria TEXT,
+                usuario_id INTEGER
+            );
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS respuestas (
+                id SERIAL PRIMARY KEY,
+                titulo TEXT NOT NULL,
+                contenido TEXT NOT NULL,
+                usuario_id INTEGER
+            );
             """
         )
     else:
@@ -58,51 +102,48 @@ def crear_base_de_datos(nombre_bd: str = "kyber.db") -> None:
                 scan_batch INTEGER DEFAULT 10,
                 scan_max INTEGER DEFAULT 100,
                 agente_activo INTEGER DEFAULT 0
-            )
+            );
             """
         )
-
-    cursor.execute(
-        f"""
-        CREATE TABLE IF NOT EXISTS reglas (
-            id {serial_type},
-            clave TEXT NOT NULL,
-            instruccion TEXT NOT NULL,
-            usuario_id INTEGER,
-            prioridad INTEGER,
-            tipo TEXT,
-            etiquetas TEXT,
-            es_principal INTEGER
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS reglas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                clave TEXT NOT NULL,
+                instruccion TEXT NOT NULL,
+                usuario_id INTEGER,
+                prioridad INTEGER,
+                tipo TEXT,
+                etiquetas TEXT,
+                es_principal INTEGER
+            );
+            """
         )
-        """
-    )
-
-    cursor.execute(
-        f"""
-        CREATE TABLE IF NOT EXISTS logs (
-            id {serial_type},
-            fecha TEXT NOT NULL,
-            remitente TEXT,
-            asunto TEXT,
-            resumen TEXT,
-            accion TEXT,
-            idioma TEXT,
-            categoria TEXT,
-            usuario_id INTEGER
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fecha TEXT NOT NULL,
+                remitente TEXT,
+                asunto TEXT,
+                resumen TEXT,
+                accion TEXT,
+                idioma TEXT,
+                categoria TEXT,
+                usuario_id INTEGER
+            );
+            """
         )
-        """
-    )
-
-    cursor.execute(
-        f"""
-        CREATE TABLE IF NOT EXISTS respuestas (
-            id {serial_type},
-            titulo TEXT NOT NULL,
-            contenido TEXT NOT NULL,
-            usuario_id INTEGER
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS respuestas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                titulo TEXT NOT NULL,
+                contenido TEXT NOT NULL,
+                usuario_id INTEGER
+            );
+            """
         )
-        """
-    )
 
     # Migraciones/Actualizaciones de columnas
     tablas_columnas = {

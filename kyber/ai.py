@@ -147,7 +147,14 @@ def procesar_correo_con_ia(
 
     TAREAS:
     1. Detecta el idioma principal del correo.
-    2. Detecta si el cliente está pidiendo una cotización y revisa si mencionó explícitamente:
+    2. Clasificación Crítica (ANUNCIO vs COTIZACIÓN):
+       - "anuncio": Identifica si el correo es marketing, publicidad, newsletter, promociones masivas, o noticias de la industria. 
+         *OJO*: Si el correo tiene un diseño de boletín, muchos enlaces a redes sociales, o lenguaje de "oferta por tiempo limitado", "conoce lo nuevo", "descuentos de temporada", CLASIFÍCALO COMO "ANUNCIO" incluso si menciona repuestos o máquinas.
+       - "cotizacion_completa": El cliente pide explícitamente precios o disponibilidad y proporciona datos técnicos (Serial o Part Number).
+       - "cotizacion_incompleta": El cliente pide precios pero le falta información crítica (como el Serial).
+       - "pregunta_general": Dudas puntuales que no son pedidos de precio ni publicidad.
+
+    3. Detecta si el cliente está pidiendo una cotización y revisa si mencionó explícitamente:
     -MODELO de la máquina o equipo (por ejemplo: "LOADER 544K", "450G", "301.4C", "215", "205"").
     - SERIAL de la máquina o equipo (por ejemplo: "1DW544KZHB0634507").
     - NÚMERO DE PIEZA o PART NUMBER (por ejemplo: "5P-3856", "5V3949", "87682993", "450-6789"). Un número de pieza válido debe tener como mínimo 7 caracteres alfanuméricos (letras y/o números) y puede incluir guion.
@@ -179,7 +186,7 @@ def procesar_correo_con_ia(
     - Si "cotizacion_incompleta":
         - Si no hay plantilla adecuada o no es claro qué falta, "accion" = "NADA" y "borrador" vacío.
         - Si hay plantilla clara o puedes redactar un mensaje corto y preciso pidiendo exactamente el dato que falta (normalmente el serial), "accion" = "BORRADOR" y "borrador" contiene solo ese pedido de información adicional.
-    - Si "anuncio": "accion" = "NADA" y "borrador" vacío. Son campañas, promociones o newsletters, no requieren respuesta.
+    - Si "anuncio": SIEMPRE pon "accion" = "NADA" y "borrador" vacío. Ignora cualquier petición de compra que parezca ser parte de una campaña publicitaria masiva.
     - Si "pregunta_general": responde normalmente siguiendo reglas y plantillas, pero mantén siempre el borrador CORTO (máximo 2–3 frases), directo y sin texto innecesario.
     6. Si ninguna plantilla coincide claramente:
     - Si es un anuncio, spam suave o comunicación no accionable: "accion" = "NADA" y "borrador" vacío.

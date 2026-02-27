@@ -19,10 +19,17 @@ def _abrir_conexion(usuario: str | None = None, clave_app: str | None = None) ->
     return conexion
 
 
-def obtener_ids_no_leidos(max_total: int | None = None, usuario: str | None = None, clave_app: str | None = None) -> List[str]:
+def obtener_ids_no_leidos(max_total: int | None = None, usuario: str | None = None, clave_app: str | None = None, desde_fecha: str | None = None) -> List[str]:
     conexion = _abrir_conexion(usuario, clave_app)
     conexion.select("INBOX")
-    estado, datos = conexion.search(None, "UNSEEN")
+    
+    # Construir el comando de búsqueda
+    search_criteria = "UNSEEN"
+    if desde_fecha:
+        # desde_fecha debe venir en formato "DD-Mon-YYYY" (ej: "27-Feb-2026")
+        search_criteria = f'(UNSEEN SINCE "{desde_fecha}")'
+    
+    estado, datos = conexion.search(None, search_criteria)
     ids = datos[0].split()
     conexion.logout()
     ids_decod = [i.decode() for i in ids]

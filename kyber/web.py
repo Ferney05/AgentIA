@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import hashlib
 import os
 import re
@@ -375,8 +375,21 @@ def delete_rule(regla_id: int = Path(...)) -> RedirectResponse:
 
 
 def _ejecutar_scan(user_info: dict) -> int:
-    ahora = datetime.utcnow().isoformat()
+    ahora_dt = datetime.utcnow()
+    ahora = ahora_dt.isoformat()
     
+    # Lógica de fecha para el escaneo:
+    # Si es Lunes (weekday == 0), buscamos desde el Sábado (2 días atrás)
+    # Si es cualquier otro día, buscamos solo desde hoy.
+    dias_atras = 0
+    if ahora_dt.weekday() == 0:  # Lunes
+        dias_atras = 2
+    
+    fecha_inicio = ahora_dt - timedelta(days=dias_atras)
+    # Formato IMAP: "DD-Mon-YYYY" (ej: "27-Feb-2026")
+    meses_eng = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    desde_fecha_imap = f"{fecha_inicio.day}-{meses_eng[fecha_inicio.month-1]}-{fecha_inicio.year}"
+
     batch = user_info.get("scan_batch", 10)
     max_total = user_info.get("scan_max", 100)
     api_key = user_info.get("gemini_api_key")
@@ -386,7 +399,7 @@ def _ejecutar_scan(user_info: dict) -> int:
     if not api_key or not gmail_user or not gmail_pwd:
         return 0
 
-    ids = obtener_ids_no_leidos(max_total, usuario=gmail_user, clave_app=gmail_pwd)
+    ids = obtener_ids_no_leidos(max_total, usuario=gmail_user, clave_app=gmail_pwd, desde_fecha=desde_fecha_imap)
 
     total = 0
     for i in range(0, len(ids), batch):

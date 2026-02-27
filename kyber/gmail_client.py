@@ -24,10 +24,11 @@ def obtener_ids_no_leidos(max_total: int | None = None, usuario: str | None = No
     conexion.select("INBOX")
     
     # Construir el comando de búsqueda
-    search_criteria = "UNSEEN"
+    # IMAP SEARCH UNSEEN SINCE 27-Feb-2026
     if desde_fecha:
-        # desde_fecha debe venir en formato "DD-Mon-YYYY" (ej: "27-Feb-2026")
-        search_criteria = f'(UNSEEN SINCE "{desde_fecha}")'
+        search_criteria = f'UNSEEN SINCE {desde_fecha}'
+    else:
+        search_criteria = "UNSEEN"
     
     estado, datos = conexion.search(None, search_criteria)
     ids = datos[0].split()

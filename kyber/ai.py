@@ -118,6 +118,7 @@ def procesar_correo_con_ia(
     historial_texto: str | None = None,
     api_key: str | None = None,
 ) -> Dict[str, str]:
+    """Procesa un correo electrónico utilizando IA para clasificarlo y generar borradores."""
     modelo = _configurar_modelo(api_key)
     reglas_texto = _reglas_como_texto()
     plantillas_texto = _plantillas_como_texto()

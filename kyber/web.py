@@ -77,7 +77,17 @@ def _get_current_user(request: Request):
 def _user_info(usuario):
     if not usuario:
         return None
-    _id, email, _ph, _creado, gemini_key, gmail_user, gmail_pwd, batch, max_scan, activo = usuario
+    # Asegurarse de que 'usuario' tenga suficientes elementos, proporcionando valores por defecto si faltan
+    # Los nuevos campos (gemini_key en adelante) pueden ser None si el usuario es antiguo o no los ha configurado
+    _id, email, _ph, _creado, *extra_fields = usuario
+    
+    gemini_key = extra_fields[0] if len(extra_fields) > 0 else None
+    gmail_user = extra_fields[1] if len(extra_fields) > 1 else None
+    gmail_pwd = extra_fields[2] if len(extra_fields) > 2 else None
+    batch = extra_fields[3] if len(extra_fields) > 3 else 10
+    max_scan = extra_fields[4] if len(extra_fields) > 4 else 100
+    activo = extra_fields[5] if len(extra_fields) > 5 else 0
+
     username = email.split("@")[0] if "@" in email else email
     username = username.strip() or email
     initial = username[0].upper()
@@ -89,8 +99,8 @@ def _user_info(usuario):
         "gemini_api_key": gemini_key,
         "gmail_user": gmail_user,
         "gmail_password": gmail_pwd,
-        "scan_batch": batch or 10,
-        "scan_max": max_scan or 100,
+        "scan_batch": batch,
+        "scan_max": max_scan,
         "agente_activo": bool(activo)
     }
 
@@ -379,11 +389,12 @@ def _ejecutar_scan(user_info: dict) -> int:
     ahora = ahora_dt.isoformat()
     
     # Lógica de fecha para el escaneo:
-    # Si es Lunes (weekday == 0), buscamos desde el Sábado (2 días atrás)
-    # Si es cualquier otro día, buscamos solo desde hoy.
-    dias_atras = 0
+    # Restamos un día adicional para asegurar que capturamos correos que pudieron llegar tarde ayer
+    # o por diferencias de zona horaria del servidor.
     if ahora_dt.weekday() == 0:  # Lunes
-        dias_atras = 2
+        dias_atras = 3 # Desde el Viernes/Sábado
+    else:
+        dias_atras = 1 # Desde ayer
     
     fecha_inicio = ahora_dt - timedelta(days=dias_atras)
     # Formato IMAP: "DD-Mon-YYYY" (ej: "27-Feb-2026")
@@ -397,9 +408,12 @@ def _ejecutar_scan(user_info: dict) -> int:
     gmail_pwd = user_info.get("gmail_password")
 
     if not api_key or not gmail_user or not gmail_pwd:
+        print(f"DEBUG: Faltan credenciales. API Key: {bool(api_key)}, User: {bool(gmail_user)}, Pwd: {bool(gmail_pwd)}")
         return 0
 
+    print(f"DEBUG: Iniciando escaneo para {gmail_user} desde {desde_fecha_imap}")
     ids = obtener_ids_no_leidos(max_total, usuario=gmail_user, clave_app=gmail_pwd, desde_fecha=desde_fecha_imap)
+    print(f"DEBUG: IDs encontrados: {len(ids)}")
 
     total = 0
     for i in range(0, len(ids), batch):
@@ -459,15 +473,23 @@ def _ejecutar_scan(user_info: dict) -> int:
                 ids_para_no_leer.append(correo["id"])
                 continue
             
-            resultado = procesar_correo_con_ia(
-                remitente=correo["remitente"],
-                asunto=correo["asunto"],
-                cuerpo=correo["cuerpo"],
-                imagen_mime=correo.get("imagen_mime"),
-                imagen_datos=correo.get("imagen_datos"),
-                historial_texto=historial_texto,
-                api_key=api_key
-            )
+            try:
+                resultado = procesar_correo_con_ia(
+                    remitente=correo["remitente"],
+                    asunto=correo["asunto"],
+                    cuerpo=correo["cuerpo"],
+                    imagen_mime=correo.get("imagen_mime"),
+                    imagen_datos=correo.get("imagen_datos"),
+                    historial_texto=historial_texto,
+                    api_key=api_key
+                )
+            except Exception as e:
+                error_str = str(e).lower()
+                if "429" in error_str or "quota" in error_str or "exhausted" in error_str:
+                    print(f"DEBUG: Cuota de IA agotada o límite de velocidad alcanzado. Deteniendo escaneo. Error: {e}")
+                    # Si se agota la cuota, devolvemos lo que llevamos procesado hasta ahora
+                    return total
+                raise e
 
             asunto_min = (correo["asunto"] or "").lower()
             cuerpo_min = (correo["cuerpo"] or "").lower()
@@ -476,53 +498,78 @@ def _ejecutar_scan(user_info: dict) -> int:
             cuerpo_u = (correo["cuerpo"] or "").upper()
 
             categoria = (resultado.get("categoria") or "").upper()
-            palabras_cot = (
-                "cotiz" in asunto_min
-                or "cotiz" in cuerpo_min
-                or "cotizar" in asunto_min
-                or "cotizar" in cuerpo_min
-                or "presupuesto" in asunto_min
-                or "presupuesto" in cuerpo_min
-                or "quote" in asunto_min
-                or "quote" in cuerpo_min
-                or "quotation" in asunto_min
-                or "quotation" in cuerpo_min
-                or "pricing" in asunto_min
-                or "pricing" in cuerpo_min
-                or "estimate" in asunto_min
-                or "estimate" in cuerpo_min
-                or "precio" in asunto_min
-                or "precio" in cuerpo_min
-            )
-            marcas = ["caterpillar", "cat", "john deere", "komatsu", "hitachi", "volvo", "case", "tcm"]
-            menciona_marca = any(m in asunto_min or m in cuerpo_min for m in marcas)
-            modelo_pat1 = r"\b\d{2,4}[A-Z]\b"
-            modelo_pat2 = r"\b[A-Z]{3,}\s?\d{2,4}[A-Z]?\b"
-            posible_modelo = bool(
-                re.search(modelo_pat1, asunto_u) or re.search(modelo_pat1, cuerpo_u) or
-                re.search(modelo_pat2, asunto_u) or re.search(modelo_pat2, cuerpo_u)
-            )
-            pn_hyphen = bool(re.search(r"\b[0-9A-Z]{1,5}-[0-9A-Z]{3,}\b", asunto_u) or re.search(r"\b[0-9A-Z]{1,5}-[0-9A-Z]{3,}\b", cuerpo_u))
-            pn_plain = bool(re.search(r"\b[0-9A-Z]{7,}\b", asunto_u) or re.search(r"\b[0-9A-Z]{7,}\b", cuerpo_u))
-            tiene_pn = pn_hyphen or pn_plain
-            tiene_serial = bool(re.search(r"\b[0-9A-Z\-]{10,}\b", asunto_u) or re.search(r"\b[0-9A-Z\-]{10,}\b", cuerpo_u))
-            es_cotizacion = (
-                categoria == "COTIZACIONES"
-                or palabras_cot
-                or (tiene_imagen and ("cotiz" in cuerpo_min or "precio" in cuerpo_min))
-                or (menciona_marca and posible_modelo)
-                or ("favor" in asunto_min and posible_modelo)
-            )
+            
+            # SI LA IA DICE QUE ES ANUNCIO, LE CREEMOS DE INMEDIATO
+            if categoria == "ANUNCIO":
+                es_cotizacion = False
+                resultado["accion"] = "NADA"
+                resultado["borrador"] = ""
+                # Lo marcamos para leer para que no estorbe
+                if correo["id"] not in ids_para_marcar:
+                    ids_para_marcar.append(correo["id"])
+            else:
+                # Solo si NO es anuncio, buscamos señales de cotización
+                palabras_cot = (
+                    "cotiz" in asunto_min
+                    or "cotiz" in cuerpo_min
+                    or "presupuesto" in asunto_min
+                    or "presupuesto" in cuerpo_min
+                    or "quote" in asunto_min
+                    or "quote" in cuerpo_min
+                    or "quotation" in asunto_min
+                    or "quotation" in cuerpo_min
+                )
+                # "precio" es muy común en spam, solo lo usamos si hay otras señales claras
+                señal_precio = "precio" in asunto_min or "precio" in cuerpo_min
+                
+                marcas = ["caterpillar", "cat", "john deere", "komatsu", "hitachi", "volvo", "case", "tcm"]
+                menciona_marca = any(m in asunto_min or m in cuerpo_min for m in marcas)
+                modelo_pat1 = r"\b\d{2,4}[A-Z]\b"
+                modelo_pat2 = r"\b[A-Z]{3,}\s?\d{2,4}[A-Z]?\b"
+                posible_modelo = bool(
+                    re.search(modelo_pat1, asunto_u) or re.search(modelo_pat1, cuerpo_u) or
+                    re.search(modelo_pat2, asunto_u) or re.search(modelo_pat2, cuerpo_u)
+                )
+                pn_hyphen = bool(re.search(r"\b[0-9A-Z]{1,5}-[0-9A-Z]{3,}\b", asunto_u) or re.search(r"\b[0-9A-Z]{1,5}-[0-9A-Z]{3,}\b", cuerpo_u))
+                pn_plain = bool(re.search(r"\b[0-9A-Z]{7,}\b", asunto_u) or re.search(r"\b[0-9A-Z]{7,}\b", cuerpo_u))
+                tiene_pn = pn_hyphen or pn_plain
+                tiene_serial = bool(re.search(r"\b[0-9A-Z\-]{10,}\b", asunto_u) or re.search(r"\b[0-9A-Z\-]{10,}\b", cuerpo_u))
+                
+                es_cotizacion = (
+                    categoria == "COTIZACIONES"
+                    or palabras_cot
+                    or (tiene_imagen and señal_precio)
+                    or (menciona_marca and posible_modelo)
+                    or ("favor" in asunto_min and posible_modelo)
+                )
+
             if es_cotizacion:
                 categoria = "COTIZACIONES"
-                ids_para_no_leer.append(correo["id"])
+                # Si el agente va a responder pidiendo datos, lo marcamos como leído.
+                # Si ya es una cotización completa (no hay acción del agente), lo dejamos NO LEÍDO para el humano.
+                if resultado.get("accion") == "BORRADOR":
+                    if correo["id"] not in ids_para_marcar:
+                        ids_para_marcar.append(correo["id"])
+                else:
+                    if correo["id"] not in ids_para_no_leer:
+                        ids_para_no_leer.append(correo["id"])
+                
                 if resultado.get("accion") != "BORRADOR" and not (tiene_pn or tiene_serial) and (posible_modelo or tiene_imagen or menciona_marca):
                     resultado["accion"] = "BORRADOR"
                     resultado["borrador"] = "Muy buenas tardes Estimad@,\nPara cotizarle, por favor envíe el serial o número de pieza de la máquina."
+                    # Si acabamos de decidir que es un borrador pidiendo datos, lo marcamos como leído
+                    if correo["id"] in ids_para_no_leer:
+                        ids_para_no_leer.remove(correo["id"])
+                    if correo["id"] not in ids_para_marcar:
+                        ids_para_marcar.append(correo["id"])
             elif categoria == "ANUNCIO":
+                # Ya manejado arriba, pero por seguridad:
                 resultado["accion"] = "NADA"
                 resultado["borrador"] = ""
-                ids_para_no_leer.append(correo["id"])
+            else:
+                # Preguntas generales o casos no claros se quedan como NO LEÍDOS para revisión
+                if correo["id"] not in ids_para_no_leer:
+                    ids_para_no_leer.append(correo["id"])
 
 
             if resultado["accion"] == "BORRADOR":
@@ -535,6 +582,7 @@ def _ejecutar_scan(user_info: dict) -> int:
                         accion="OMITIDO_BORRADOR_THREAD",
                         idioma=resultado.get("idioma", "desconocido"),
                         categoria=categoria or "GENERAL",
+                        usuario_id=user_info["id"]
                     )
                     resultado["accion"] = "NADA"
                 elif existe_borrador_para_message_id(correo.get("message_id") or "", usuario=gmail_user, clave_app=gmail_pwd):
@@ -546,6 +594,7 @@ def _ejecutar_scan(user_info: dict) -> int:
                         accion="OMITIDO_BORRADOR_MSG",
                         idioma=resultado.get("idioma", "desconocido"),
                         categoria=categoria or "GENERAL",
+                        usuario_id=user_info["id"]
                     )
                     resultado["accion"] = "NADA"
                 else:
@@ -609,8 +658,17 @@ def scan(request: Request) -> RedirectResponse:
     if not usuario:
         return RedirectResponse(url="/auth/login", status_code=303)
     user_info = _user_info(usuario)
-    _ejecutar_scan(user_info)
-    return RedirectResponse(url="/?toast=scan_ok", status_code=303)
+    try:
+        procesados = _ejecutar_scan(user_info)
+        if procesados == 0:
+            return RedirectResponse(url="/?toast=scan_empty", status_code=303)
+        return RedirectResponse(url=f"/?toast=scan_ok&count={procesados}", status_code=303)
+    except Exception as e:
+        error_str = str(e).lower()
+        if "429" in error_str or "quota" in error_str or "exhausted" in error_str:
+            return RedirectResponse(url="/?toast=scan_quota_error", status_code=303)
+        print(f"ERROR CRITICO EN SCAN: {e}")
+        return RedirectResponse(url="/?toast=scan_error", status_code=303)
 
 
 @app.get("/agent/status")
@@ -681,8 +739,9 @@ def translate_json(
     usuario = _get_current_user(request)
     if not usuario:
         return {"ok": False, "error": "unauthorized"}
+    user_info = _user_info(usuario)
     try:
-        traducido = traducir_texto(texto, direccion)
+        traducido = traducir_texto(texto, direccion, api_key=user_info["gemini_api_key"])
         return {"ok": True, "translated": traducido}
     except Exception:
         return {"ok": False, "error": "error"}
@@ -744,7 +803,10 @@ def login_post(
     usuario = obtener_usuario_por_email(email.strip().lower())
     if not usuario:
         return RedirectResponse(url="/auth/login?error=credenciales", status_code=303)
-    _id, _email, password_hash, _creado = usuario
+    
+    # Usamos * para capturar los campos adicionales de configuración de forma flexible
+    _id, _email, password_hash, _creado, *_ = usuario
+    
     if not _verify_password(password, password_hash):
         return RedirectResponse(url="/auth/login?error=credenciales", status_code=303)
 

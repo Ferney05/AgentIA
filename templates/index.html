@@ -757,33 +757,45 @@
         <div class="grid gap-4 md:grid-cols-2">
           <div class="flex flex-col gap-2">
             <label class="text-xs font-medium text-slate-300">Gemini API Key</label>
-            <input 
-              type="password" 
-              name="gemini_api_key" 
-              value="{{ user.gemini_api_key or '' }}"
-              class="rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
-              placeholder="AIzaSy..."
-            />
+            <div class="relative">
+              <input 
+                type="password" 
+                id="input-gemini-key"
+                name="gemini_api_key" 
+                value="{{ user.gemini_api_key if user.gemini_api_key else '' }}"
+                class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+                placeholder="••••••••••••••••"
+              />
+              <button type="button" onclick="toggleVisibility('input-gemini-key')" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              </button>
+            </div>
           </div>
           <div class="flex flex-col gap-2">
             <label class="text-xs font-medium text-slate-300">Gmail Usuario (Email)</label>
             <input 
               type="email" 
               name="gmail_user" 
-              value="{{ user.gmail_user or '' }}"
+              value="{{ user.gmail_user if user.gmail_user else '' }}"
               class="rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
               placeholder="soporte@empresa.com"
             />
           </div>
           <div class="flex flex-col gap-2">
             <label class="text-xs font-medium text-slate-300">Gmail Password (Contraseña de App)</label>
-            <input 
-              type="password" 
-              name="gmail_password" 
-              value="{{ user.gmail_password or '' }}"
-              class="rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
-              placeholder="abcd efgh ijkl mnop"
-            />
+            <div class="relative">
+              <input 
+                type="password" 
+                id="input-gmail-pwd"
+                name="gmail_password" 
+                value="{{ user.gmail_password if user.gmail_password else '' }}"
+                class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+                placeholder="••••••••••••••••"
+              />
+              <button type="button" onclick="toggleVisibility('input-gmail-pwd')" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -880,6 +892,27 @@
       let text = "";
       let bg = "linear-gradient(to right, #22c55e, #14b8a6)";
 
+      if (toast === "config_actualizada") {
+        msg = "Configuración actualizada correctamente";
+        bg = "linear-gradient(to right, #10b981, #059669)";
+      }
+      if (toast === "scan_empty") {
+        msg = "No se encontraron correos nuevos para procesar.";
+        bg = "linear-gradient(to right, #64748b, #334155)";
+      }
+      if (toast === "scan_quota_error") {
+        msg = "Límite de Google Gemini alcanzado. Por favor, espera unos minutos e intenta de nuevo.";
+        bg = "linear-gradient(to right, #f59e0b, #d97706)";
+      }
+      if (toast === "scan_error") {
+        msg = "Hubo un problema técnico al escanear. Revisa tus credenciales en Configuración.";
+        bg = "linear-gradient(to right, #ef4444, #b91c1c)";
+      }
+      if (toast === "scan_ok") {
+        const count = new URLSearchParams(window.location.search).get("count");
+        msg = count ? `Escaneo finalizado: ${count} correos procesados.` : "Escaneo finalizado correctamente.";
+        bg = "linear-gradient(to right, #10b981, #059669)";
+      }
       if (toast === "regla_creada") {
         text = "Regla creada correctamente";
       } else if (toast === "regla_editada") {
@@ -927,6 +960,15 @@
       btn.innerHTML =
         '<span class="inline-flex items-center gap-2"><span class="h-3 w-3 animate-spin rounded-full border border-slate-900 border-t-slate-50"></span>Ejecutando…</span>';
       return true;
+    }
+
+    function toggleVisibility(id) {
+      const el = document.getElementById(id);
+      if (el.type === "password") {
+        el.type = "text";
+      } else {
+        el.type = "password";
+      }
     }
 
     (function () {

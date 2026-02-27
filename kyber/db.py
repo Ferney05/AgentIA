@@ -377,7 +377,7 @@ def obtener_usuario_por_email(
     cursor = conn.cursor()
     p = _get_placeholder()
     cursor.execute(
-        f"SELECT id, email, password_hash, creado_en, gemini_api_key, gmail_user, gmail_password, scan_batch, scan_max FROM usuarios WHERE email = {p}",
+        f"SELECT id, email, password_hash, creado_en, gemini_api_key, gmail_user, gmail_password, scan_batch, scan_max, agente_activo FROM usuarios WHERE email = {p}",
         (email,),
     )
     fila = cursor.fetchone()
@@ -398,6 +398,65 @@ def obtener_usuario_por_id(
     fila = cursor.fetchone()
     conn.close()
     return fila
+
+
+def obtener_usuarios_agente_activo(nombre_bd: str = "kyber.db") -> List[Tuple[Any, ...]]:
+    conn = _get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, email, password_hash, creado_en, gemini_api_key, gmail_user, gmail_password, scan_batch, scan_max, agente_activo FROM usuarios WHERE agente_activo = 1"
+    )
+    filas = cursor.fetchall()
+    conn.close()
+    return filas
+
+
+def actualizar_configuracion_usuario(
+    usuario_id: int,
+    gemini_api_key: str | None = None,
+    gmail_user: str | None = None,
+    gmail_password: str | None = None,
+    scan_batch: int | None = None,
+    scan_max: int | None = None,
+    agente_activo: int | None = None,
+    nombre_bd: str = "kyber.db",
+) -> None:
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+    
+    updates = []
+    params = []
+    
+    if gemini_api_key is not None:
+        updates.append(f"gemini_api_key = {p}")
+        params.append(gemini_api_key)
+    if gmail_user is not None:
+        updates.append(f"gmail_user = {p}")
+        params.append(gmail_user)
+    if gmail_password is not None:
+        updates.append(f"gmail_password = {p}")
+        params.append(gmail_password)
+    if scan_batch is not None:
+        updates.append(f"scan_batch = {p}")
+        params.append(scan_batch)
+    if scan_max is not None:
+        updates.append(f"scan_max = {p}")
+        params.append(scan_max)
+    if agente_activo is not None:
+        updates.append(f"agente_activo = {p}")
+        params.append(agente_activo)
+        
+    if not updates:
+        conn.close()
+        return
+        
+    query = f"UPDATE usuarios SET {', '.join(updates)} WHERE id = {p}"
+    params.append(usuario_id)
+    
+    cursor.execute(query, tuple(params))
+    conn.commit()
+    conn.close()
 
 
 def obtener_usuarios_agente_activo(nombre_bd: str = "kyber.db") -> List[Tuple[Any, ...]]:

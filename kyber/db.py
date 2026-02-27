@@ -240,19 +240,21 @@ def obtener_respuesta_por_id(respuesta_id: int, nombre_bd: str = "kyber.db") -> 
     return fila
 
 def actualizar_respuesta(respuesta_id: int, titulo: str, contenido: str, nombre_bd: str = "kyber.db") -> None:
-    conn = sqlite3.connect(nombre_bd)
+    conn = _get_connection()
     cursor = conn.cursor()
+    p = _get_placeholder()
     cursor.execute(
-        "UPDATE respuestas SET titulo = ?, contenido = ? WHERE id = ?",
+        f"UPDATE respuestas SET titulo = {p}, contenido = {p} WHERE id = {p}",
         (titulo, contenido, respuesta_id),
     )
     conn.commit()
     conn.close()
 
 def eliminar_respuesta(respuesta_id: int, nombre_bd: str = "kyber.db") -> None:
-    conn = sqlite3.connect(nombre_bd)
+    conn = _get_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM respuestas WHERE id = ?", (respuesta_id,))
+    p = _get_placeholder()
+    cursor.execute(f"DELETE FROM respuestas WHERE id = {p}", (respuesta_id,))
     conn.commit()
     conn.close()
 
@@ -282,24 +284,28 @@ def insertar_log(
 
 
 def crear_usuario(
-    email: str, password_hash: str, creado_en: str, nombre_bd: str = "kyber.db"
+    email: str, password_hash: str, creado_en: str
 ) -> int:
     conn = _get_connection()
     cursor = conn.cursor()
     p = _get_placeholder()
-    cursor.execute(
-        f"INSERT INTO usuarios (email, password_hash, creado_en) VALUES ({p}, {p}, {p})",
-        (email, password_hash, creado_en),
-    )
-    conn.commit()
     
-    # En PostgreSQL se usa RETURNING id, en SQLite lastrowid
     if os.environ.get("DATABASE_URL"):
-        cursor.execute("SELECT LASTVAL()")
+        # PostgreSQL: usamos RETURNING para obtener el ID de forma segura
+        cursor.execute(
+            f"INSERT INTO usuarios (email, password_hash, creado_en) VALUES ({p}, {p}, {p}) RETURNING id",
+            (email, password_hash, creado_en),
+        )
         user_id = cursor.fetchone()[0]
     else:
+        # SQLite
+        cursor.execute(
+            f"INSERT INTO usuarios (email, password_hash, creado_en) VALUES ({p}, {p}, {p})",
+            (email, password_hash, creado_en),
+        )
         user_id = cursor.lastrowid
         
+    conn.commit()
     conn.close()
     return user_id
 
@@ -394,29 +400,30 @@ def actualizar_configuracion_usuario(
 
 
 def obtener_resumen_logs(usuario_id: int | None = None, nombre_bd: str = "kyber.db") -> Dict[str, int]:
-    conn = sqlite3.connect(nombre_bd)
+    conn = _get_connection()
     cursor = conn.cursor()
+    p = _get_placeholder()
 
     hoy = datetime.utcnow().strftime("%Y-%m-%d")
     if usuario_id is None:
         cursor.execute(
-            "SELECT COUNT(*) FROM logs WHERE accion = ?", ("NADA",)
+            f"SELECT COUNT(*) FROM logs WHERE accion = {p}", ("NADA",)
         )
     else:
         cursor.execute(
-            "SELECT COUNT(*) FROM logs WHERE accion = ? AND (usuario_id = ? OR usuario_id IS NULL)",
+            f"SELECT COUNT(*) FROM logs WHERE accion = {p} AND (usuario_id = {p} OR usuario_id IS NULL)",
             ("NADA", usuario_id),
         )
     sin_accion = cursor.fetchone()[0]
 
     if usuario_id is None:
         cursor.execute(
-            "SELECT COUNT(*) FROM logs WHERE accion = 'BORRADOR' AND fecha LIKE ?",
+            f"SELECT COUNT(*) FROM logs WHERE accion = 'BORRADOR' AND fecha LIKE {p}",
             (hoy + "%",),
         )
     else:
         cursor.execute(
-            "SELECT COUNT(*) FROM logs WHERE accion = 'BORRADOR' AND fecha LIKE ? AND (usuario_id = ? OR usuario_id IS NULL)",
+            f"SELECT COUNT(*) FROM logs WHERE accion = 'BORRADOR' AND fecha LIKE {p} AND (usuario_id = {p} OR usuario_id IS NULL)",
             (hoy + "%", usuario_id),
         )
     borradores = cursor.fetchone()[0]
@@ -431,26 +438,27 @@ def obtener_resumen_logs(usuario_id: int | None = None, nombre_bd: str = "kyber.
 def obtener_ultimos_logs(
     limite: int = 10, usuario_id: int | None = None, nombre_bd: str = "kyber.db"
 ) -> List[Tuple[Any, ...]]:
-    conn = sqlite3.connect(nombre_bd)
+    conn = _get_connection()
     cursor = conn.cursor()
+    p = _get_placeholder()
     if usuario_id is None:
         cursor.execute(
-            """
+            f"""
             SELECT fecha, remitente, asunto, resumen, accion, idioma, categoria
             FROM logs
             ORDER BY id DESC
-            LIMIT ?
+            LIMIT {p}
             """,
             (limite,),
         )
     else:
         cursor.execute(
-            """
+            f"""
             SELECT fecha, remitente, asunto, resumen, accion, idioma, categoria
             FROM logs
-            WHERE usuario_id = ? OR usuario_id IS NULL
+            WHERE usuario_id = {p} OR usuario_id IS NULL
             ORDER BY id DESC
-            LIMIT ?
+            LIMIT {p}
             """,
             (usuario_id, limite),
         )
@@ -467,21 +475,22 @@ def obtener_logs_filtrados_paginados(
     accion: str | None = None,
     nombre_bd: str = "kyber.db",
 ) -> Tuple[List[Tuple[Any, ...]], int]:
-    conn = sqlite3.connect(nombre_bd)
+    conn = _get_connection()
     cursor = conn.cursor()
+    p = _get_placeholder()
     where_clauses = []
     params: list[Any] = []
 
     if usuario_id is not None:
-        where_clauses.append("(usuario_id = ? OR usuario_id IS NULL)")
+        where_clauses.append(f"(usuario_id = {p} OR usuario_id IS NULL)")
         params.append(usuario_id)
 
     if categoria:
-        where_clauses.append("COALESCE(categoria, 'GENERAL') = ?")
+        where_clauses.append(f"COALESCE(categoria, 'GENERAL') = {p}")
         params.append(categoria)
 
     if accion:
-        where_clauses.append("accion = ?")
+        where_clauses.append(f"accion = {p}")
         params.append(accion)
 
     where_sql = ""
@@ -499,7 +508,7 @@ def obtener_logs_filtrados_paginados(
         FROM logs
         {where_sql}
         ORDER BY id DESC
-        LIMIT ? OFFSET ?
+        LIMIT {p} OFFSET {p}
         """,
         tuple(params_con_limite),
     )
@@ -514,21 +523,22 @@ def eliminar_logs(
     accion: str | None = None,
     nombre_bd: str = "kyber.db",
 ) -> int:
-    conn = sqlite3.connect(nombre_bd)
+    conn = _get_connection()
     cursor = conn.cursor()
+    p = _get_placeholder()
     where_clauses = []
     params: list[Any] = []
 
     if usuario_id is not None:
-        where_clauses.append("(usuario_id = ? OR usuario_id IS NULL)")
+        where_clauses.append(f"(usuario_id = {p} OR usuario_id IS NULL)")
         params.append(usuario_id)
 
     if categoria:
-        where_clauses.append("COALESCE(categoria, 'GENERAL') = ?")
+        where_clauses.append(f"COALESCE(categoria, 'GENERAL') = {p}")
         params.append(categoria)
 
     if accion:
-        where_clauses.append("accion = ?")
+        where_clauses.append(f"accion = {p}")
         params.append(accion)
 
     where_sql = ""
@@ -543,10 +553,11 @@ def eliminar_logs(
 
 
 def obtener_stats_categorias(
-    usuario_id: int | None = None, nombre_bd: str = "kyber.db"
+    usuario_id: int | None = None
 ) -> List[Tuple[Any, ...]]:
-    conn = sqlite3.connect(nombre_bd)
+    conn = _get_connection()
     cursor = conn.cursor()
+    p = _get_placeholder()
     if usuario_id is None:
         cursor.execute(
             """
@@ -557,10 +568,10 @@ def obtener_stats_categorias(
         )
     else:
         cursor.execute(
-            """
+            f"""
             SELECT COALESCE(categoria, 'GENERAL') AS categoria, COUNT(*) AS total
             FROM logs
-            WHERE usuario_id = ? OR usuario_id IS NULL
+            WHERE usuario_id = {p} OR usuario_id IS NULL
             GROUP BY COALESCE(categoria, 'GENERAL')
             """,
             (usuario_id,),
@@ -575,14 +586,29 @@ def obtener_borradores_por_periodo(
     usuario_id: int | None = None,
     nombre_bd: str = "kyber.db",
 ) -> List[Tuple[Any, ...]]:
-    conn = sqlite3.connect(nombre_bd)
+    conn = _get_connection()
     cursor = conn.cursor()
-    if periodo == "semanal":
-        group_expr = "strftime('%Y-%W', replace(fecha, 'T', ' '))"
-    elif periodo == "mensual":
-        group_expr = "strftime('%Y-%m', replace(fecha, 'T', ' '))"
+    p = _get_placeholder()
+    
+    is_pg = os.environ.get("DATABASE_URL")
+    
+    if is_pg:
+        # PostgreSQL
+        if periodo == "semanal":
+            group_expr = "to_char(fecha::timestamp, 'YYYY-WW')"
+        elif periodo == "mensual":
+            group_expr = "to_char(fecha::timestamp, 'YYYY-MM')"
+        else:
+            group_expr = "to_char(fecha::timestamp, 'YYYY-MM-DD')"
     else:
-        group_expr = "strftime('%Y-%m-%d', replace(fecha, 'T', ' '))"
+        # SQLite
+        if periodo == "semanal":
+            group_expr = "strftime('%Y-%W', replace(fecha, 'T', ' '))"
+        elif periodo == "mensual":
+            group_expr = "strftime('%Y-%m', replace(fecha, 'T', ' '))"
+        else:
+            group_expr = "strftime('%Y-%m-%d', replace(fecha, 'T', ' '))"
+
     if usuario_id is None:
         cursor.execute(
             f"""
@@ -591,7 +617,7 @@ def obtener_borradores_por_periodo(
             WHERE accion = 'BORRADOR'
             GROUP BY per
             ORDER BY per ASC
-            LIMIT ?
+            LIMIT {p}
             """,
             (limite,),
         )
@@ -600,10 +626,10 @@ def obtener_borradores_por_periodo(
             f"""
             SELECT {group_expr} AS per, COUNT(*) AS total
             FROM logs
-            WHERE accion = 'BORRADOR' AND (usuario_id = ? OR usuario_id IS NULL)
+            WHERE accion = 'BORRADOR' AND (usuario_id = {p} OR usuario_id IS NULL)
             GROUP BY per
             ORDER BY per ASC
-            LIMIT ?
+            LIMIT {p}
             """,
             (usuario_id, limite),
         )

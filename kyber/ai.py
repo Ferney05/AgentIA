@@ -7,11 +7,11 @@ import google.generativeai as genai
 from .db import obtener_reglas, obtener_respuestas
 
 
-def _configurar_modelo() -> genai.GenerativeModel:
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        raise RuntimeError("GEMINI_API_KEY no configurada en el entorno")
-    genai.configure(api_key=api_key)
+def _configurar_modelo(api_key: str | None = None) -> genai.GenerativeModel:
+    key = api_key or os.environ.get("GEMINI_API_KEY")
+    if not key:
+        raise RuntimeError("GEMINI_API_KEY no configurada")
+    genai.configure(api_key=key)
     return genai.GenerativeModel("gemini-2.5-flash")
 
 
@@ -69,8 +69,8 @@ def _tareas_politicas_como_texto() -> str:
     return "\n\n".join(bloques) if bloques else "Sin tareas o políticas adicionales configuradas."
 
 
-def traducir_texto(texto: str, direccion: str) -> str:
-    modelo = _configurar_modelo()
+def traducir_texto(texto: str, direccion: str, api_key: str | None = None) -> str:
+    modelo = _configurar_modelo(api_key)
     dir_norm = (direccion or "").lower()
     if dir_norm == "es_en":
         instruccion = "Traduce el siguiente texto de español a inglés. Responde solo con la traducción, sin explicaciones ni comentarios adicionales."
@@ -116,8 +116,9 @@ def procesar_correo_con_ia(
     imagen_mime: str | None = None,
     imagen_datos: bytes | None = None,
     historial_texto: str | None = None,
+    api_key: str | None = None,
 ) -> Dict[str, str]:
-    modelo = _configurar_modelo()
+    modelo = _configurar_modelo(api_key)
     reglas_texto = _reglas_como_texto()
     plantillas_texto = _plantillas_como_texto()
     extras_texto = _tareas_politicas_como_texto()
@@ -255,8 +256,8 @@ def procesar_correo_con_ia(
     return resultado
 
 
-def sugerir_clave_prioridad(instruccion: str) -> Dict[str, str]:
-    modelo = _configurar_modelo()
+def sugerir_clave_prioridad(instruccion: str, api_key: str | None = None) -> Dict[str, str]:
+    modelo = _configurar_modelo(api_key)
     guia = """
 Eres un asistente que clasifica y titula reglas de educación para un agente de correo.
 Objetivo:
@@ -290,8 +291,8 @@ Devuelve SOLO JSON con:
     return {"clave": clave, "prioridad": str(prioridad_val)}
 
 
-def sugerir_etiquetas(instruccion: str) -> Dict[str, str]:
-    modelo = _configurar_modelo()
+def sugerir_etiquetas(instruccion: str, api_key: str | None = None) -> Dict[str, str]:
+    modelo = _configurar_modelo(api_key)
     guia = """
 Genera etiquetas cortas y en minúsculas, separadas por comas, basadas en la instrucción.
 Reglas:

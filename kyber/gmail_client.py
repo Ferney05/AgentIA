@@ -9,23 +9,18 @@ from email.header import decode_header
 from typing import Any, Dict, List, Tuple
 
 
-def _credenciales() -> Tuple[str, str]:
-    usuario = os.environ.get("KYBER_GMAIL_USER")
-    clave_app = os.environ.get("KYBER_GMAIL_APP_PASSWORD")
-    if not usuario or not clave_app:
-        raise RuntimeError("KYBER_GMAIL_USER o KYBER_GMAIL_APP_PASSWORD no configuradas")
-    return usuario, clave_app
-
-
-def _abrir_conexion() -> imaplib.IMAP4_SSL:
-    usuario, clave_app = _credenciales()
+def _abrir_conexion(usuario: str | None = None, clave_app: str | None = None) -> imaplib.IMAP4_SSL:
+    user = usuario or os.environ.get("KYBER_GMAIL_USER")
+    pwd = clave_app or os.environ.get("KYBER_GMAIL_APP_PASSWORD")
+    if not user or not pwd:
+        raise RuntimeError("Credenciales de Gmail no configuradas")
     conexion = imaplib.IMAP4_SSL("imap.gmail.com")
-    conexion.login(usuario, clave_app)
+    conexion.login(user, pwd)
     return conexion
 
 
-def obtener_ids_no_leidos(max_total: int | None = None) -> List[str]:
-    conexion = _abrir_conexion()
+def obtener_ids_no_leidos(max_total: int | None = None, usuario: str | None = None, clave_app: str | None = None) -> List[str]:
+    conexion = _abrir_conexion(usuario, clave_app)
     conexion.select("INBOX")
     estado, datos = conexion.search(None, "UNSEEN")
     ids = datos[0].split()
@@ -36,8 +31,8 @@ def obtener_ids_no_leidos(max_total: int | None = None) -> List[str]:
     return ids_decod
 
 
-def obtener_correos_por_ids(ids: List[str]) -> List[Dict[str, Any]]:
-    conexion = _abrir_conexion()
+def obtener_correos_por_ids(ids: List[str], usuario: str | None = None, clave_app: str | None = None) -> List[Dict[str, Any]]:
+    conexion = _abrir_conexion(usuario, clave_app)
     conexion.select("INBOX")
     resultados: List[Dict[str, str]] = []
     for correo_id in ids:
@@ -141,10 +136,10 @@ def obtener_correos_por_ids(ids: List[str]) -> List[Dict[str, Any]]:
     conexion.logout()
     return resultados
 
-def obtener_historial_por_thread(thread_id: str, limite: int = 5) -> List[Dict[str, Any]]:
+def obtener_historial_por_thread(thread_id: str, limite: int = 5, usuario: str | None = None, clave_app: str | None = None) -> List[Dict[str, Any]]:
     if not thread_id:
         return []
-    conexion = _abrir_conexion()
+    conexion = _abrir_conexion(usuario, clave_app)
     try:
         conexion.select("[Gmail]/All Mail")
     except Exception:
@@ -200,10 +195,10 @@ def obtener_historial_por_thread(thread_id: str, limite: int = 5) -> List[Dict[s
     return historial
 
 
-def marcar_como_leido(ids: List[str]) -> None:
+def marcar_como_leido(ids: List[str], usuario: str | None = None, clave_app: str | None = None) -> None:
     if not ids:
         return
-    conexion = _abrir_conexion()
+    conexion = _abrir_conexion(usuario, clave_app)
     conexion.select("INBOX")
     for correo_id in ids:
         try:
@@ -212,10 +207,10 @@ def marcar_como_leido(ids: List[str]) -> None:
             pass
     conexion.logout()
 
-def marcar_como_no_leido(ids: List[str]) -> None:
+def marcar_como_no_leido(ids: List[str], usuario: str | None = None, clave_app: str | None = None) -> None:
     if not ids:
         return
-    conexion = _abrir_conexion()
+    conexion = _abrir_conexion(usuario, clave_app)
     conexion.select("INBOX")
     for correo_id in ids:
         try:
@@ -223,10 +218,10 @@ def marcar_como_no_leido(ids: List[str]) -> None:
         except Exception:
             pass
     conexion.logout()
-def archivar_ids(ids: List[str]) -> None:
+def archivar_ids(ids: List[str], usuario: str | None = None, clave_app: str | None = None) -> None:
     if not ids:
         return
-    conexion = _abrir_conexion()
+    conexion = _abrir_conexion(usuario, clave_app)
     conexion.select("INBOX")
     for correo_id in ids:
         ok = False
@@ -263,10 +258,16 @@ def crear_borrador(
     cuerpo: str,
     in_reply_to: str | None = None,
     references: str | None = None,
+    usuario: str | None = None,
+    clave_app: str | None = None,
 ) -> None:
-    usuario, clave_app = _credenciales()
+    user = usuario or os.environ.get("KYBER_GMAIL_USER")
+    pwd = clave_app or os.environ.get("KYBER_GMAIL_APP_PASSWORD")
+    if not user or not pwd:
+        return
+        
     mensaje = MIMEText(cuerpo, _charset="utf-8")
-    mensaje["From"] = usuario
+    mensaje["From"] = user
     mensaje["To"] = responder_a
     mensaje["Subject"] = asunto
     if in_reply_to:
@@ -274,7 +275,7 @@ def crear_borrador(
     if references:
         mensaje["References"] = references
 
-    conexion = _abrir_conexion()
+    conexion = _abrir_conexion(user, pwd)
 
     timestamp = imaplib.Time2Internaldate(time.time())
     conexion.append(
@@ -286,10 +287,10 @@ def crear_borrador(
 
     conexion.logout()
 
-def existe_borrador_para_message_id(message_id: str) -> bool:
+def existe_borrador_para_message_id(message_id: str, usuario: str | None = None, clave_app: str | None = None) -> bool:
     if not message_id:
         return False
-    conexion = _abrir_conexion()
+    conexion = _abrir_conexion(usuario, clave_app)
     try:
         try:
             conexion.select("[Gmail]/Drafts")
@@ -322,10 +323,10 @@ def existe_borrador_para_message_id(message_id: str) -> bool:
             conexion.logout()
         except Exception:
             pass
-def existe_borrador_para_thread_id(thread_id: str) -> bool:
+def existe_borrador_para_thread_id(thread_id: str, usuario: str | None = None, clave_app: str | None = None) -> bool:
     if not thread_id:
         return False
-    conexion = _abrir_conexion()
+    conexion = _abrir_conexion(usuario, clave_app)
     try:
         try:
             conexion.select("[Gmail]/Drafts")

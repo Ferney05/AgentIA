@@ -77,11 +77,22 @@ def _get_current_user(request: Request):
 def _user_info(usuario):
     if not usuario:
         return None
-    _id, email, _ph, _creado = usuario
+    _id, email, _ph, _creado, gemini_key, gmail_user, gmail_pwd, batch, max_scan, activo = usuario
     username = email.split("@")[0] if "@" in email else email
     username = username.strip() or email
     initial = username[0].upper()
-    return {"id": _id, "email": email, "username": username, "initial": initial}
+    return {
+        "id": _id, 
+        "email": email, 
+        "username": username, 
+        "initial": initial,
+        "gemini_api_key": gemini_key,
+        "gmail_user": gmail_user,
+        "gmail_password": gmail_pwd,
+        "scan_batch": batch or 10,
+        "scan_max": max_scan or 100,
+        "agente_activo": bool(activo)
+    }
 
 
 @app.on_event("startup")
@@ -363,23 +374,24 @@ def delete_rule(regla_id: int = Path(...)) -> RedirectResponse:
     return RedirectResponse(url="/?view=rules&toast=regla_eliminada", status_code=303)
 
 
-def _ejecutar_scan() -> int:
+def _ejecutar_scan(user_info: dict) -> int:
     ahora = datetime.utcnow().isoformat()
-    try:
-        batch = int(os.environ.get("KYBER_SCAN_BATCH", "10"))
-    except Exception:
-        batch = 10
-    try:
-        max_total = int(os.environ.get("KYBER_SCAN_MAX", "100"))
-    except Exception:
-        max_total = 100
+    
+    batch = user_info.get("scan_batch", 10)
+    max_total = user_info.get("scan_max", 100)
+    api_key = user_info.get("gemini_api_key")
+    gmail_user = user_info.get("gmail_user")
+    gmail_pwd = user_info.get("gmail_password")
 
-    ids = obtener_ids_no_leidos(max_total)
+    if not api_key or not gmail_user or not gmail_pwd:
+        return 0
+
+    ids = obtener_ids_no_leidos(max_total, usuario=gmail_user, clave_app=gmail_pwd)
 
     total = 0
     for i in range(0, len(ids), batch):
         chunk = ids[i : i + batch]
-        correos = obtener_correos_por_ids(chunk)
+        correos = obtener_correos_por_ids(chunk, usuario=gmail_user, clave_app=gmail_pwd)
 
         ids_para_marcar: list[str] = []
         ids_para_no_leer: list[str] = []
@@ -388,7 +400,7 @@ def _ejecutar_scan() -> int:
             historial_texto = ""
             thr = correo.get("thread_id")
             mensaje_id = correo.get("message_id") or ""
-            if thr and existe_borrador_para_thread_id(thr):
+            if thr and existe_borrador_para_thread_id(thr, usuario=gmail_user, clave_app=gmail_pwd):
                 insertar_log(
                     fecha=ahora,
                     remitente=correo["remitente"],
@@ -397,10 +409,11 @@ def _ejecutar_scan() -> int:
                     accion="OMITIDO_BORRADOR_THREAD",
                     idioma="desconocido",
                     categoria="GENERAL",
+                    usuario_id=user_info["id"]
                 )
                 ids_para_no_leer.append(correo["id"])
                 continue
-            if mensaje_id and existe_borrador_para_message_id(mensaje_id):
+            if mensaje_id and existe_borrador_para_message_id(mensaje_id, usuario=gmail_user, clave_app=gmail_pwd):
                 insertar_log(
                     fecha=ahora,
                     remitente=correo["remitente"],
@@ -409,14 +422,15 @@ def _ejecutar_scan() -> int:
                     accion="OMITIDO_BORRADOR_MSG",
                     idioma="desconocido",
                     categoria="GENERAL",
+                    usuario_id=user_info["id"]
                 )
                 ids_para_no_leer.append(correo["id"])
                 continue
             ultimo_de_mi_usuario = False
             if thr:
-                hist = obtener_historial_por_thread(thr, limite=5)
+                hist = obtener_historial_por_thread(thr, limite=5, usuario=gmail_user, clave_app=gmail_pwd)
                 if hist:
-                    my_email = (os.environ.get("KYBER_GMAIL_USER") or "").lower()
+                    my_email = (gmail_user or "").lower()
                     try:
                         ultimo = hist[-1]
                         ultimo_from = (ultimo.get("from") or "").lower()
@@ -431,6 +445,7 @@ def _ejecutar_scan() -> int:
             if ultimo_de_mi_usuario:
                 ids_para_no_leer.append(correo["id"])
                 continue
+            
             resultado = procesar_correo_con_ia(
                 remitente=correo["remitente"],
                 asunto=correo["asunto"],
@@ -438,6 +453,7 @@ def _ejecutar_scan() -> int:
                 imagen_mime=correo.get("imagen_mime"),
                 imagen_datos=correo.get("imagen_datos"),
                 historial_texto=historial_texto,
+                api_key=api_key
             )
 
             asunto_min = (correo["asunto"] or "").lower()
@@ -497,7 +513,7 @@ def _ejecutar_scan() -> int:
 
 
             if resultado["accion"] == "BORRADOR":
-                if thr and existe_borrador_para_thread_id(thr):
+                if thr and existe_borrador_para_thread_id(thr, usuario=gmail_user, clave_app=gmail_pwd):
                     insertar_log(
                         fecha=ahora,
                         remitente=correo["remitente"],
@@ -508,7 +524,7 @@ def _ejecutar_scan() -> int:
                         categoria=categoria or "GENERAL",
                     )
                     resultado["accion"] = "NADA"
-                elif existe_borrador_para_message_id(correo.get("message_id") or ""):
+                elif existe_borrador_para_message_id(correo.get("message_id") or "", usuario=gmail_user, clave_app=gmail_pwd):
                     insertar_log(
                         fecha=ahora,
                         remitente=correo["remitente"],
@@ -548,6 +564,8 @@ def _ejecutar_scan() -> int:
                         cuerpo=resultado["borrador"],
                         in_reply_to=correo.get("message_id"),
                         references=correo.get("message_id"),
+                        usuario=gmail_user,
+                        clave_app=gmail_pwd
                     )
                     if not es_cotizacion:
                         ids_para_marcar.append(correo["id"])
@@ -560,41 +578,85 @@ def _ejecutar_scan() -> int:
                 accion=resultado["accion"],
                 idioma=resultado["idioma"],
                 categoria=categoria,
+                usuario_id=user_info["id"]
             )
             total += 1
 
         if ids_para_marcar:
-            marcar_como_leido(ids_para_marcar)
+            marcar_como_leido(ids_para_marcar, usuario=gmail_user, clave_app=gmail_pwd)
         if ids_para_no_leer:
-            marcar_como_no_leido(ids_para_no_leer)
+            marcar_como_no_leido(ids_para_no_leer, usuario=gmail_user, clave_app=gmail_pwd)
 
     return total
 
 
 @app.post("/scan")
 def scan(request: Request) -> RedirectResponse:
-    _ejecutar_scan()
+    usuario = _get_current_user(request)
+    if not usuario:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    user_info = _user_info(usuario)
+    _ejecutar_scan(user_info)
     return RedirectResponse(url="/?toast=scan_ok", status_code=303)
 
 
 @app.get("/agent/status")
-def agent_status() -> dict:
-    return {"running": AGENTE_ACTIVO}
+def agent_status(request: Request) -> dict:
+    usuario = _get_current_user(request)
+    if not usuario:
+        return {"running": False}
+    user_info = _user_info(usuario)
+    return {"running": user_info["agente_activo"]}
 
 
 @app.post("/agent/toggle")
-def agent_toggle() -> dict:
-    global AGENTE_ACTIVO
-    AGENTE_ACTIVO = not AGENTE_ACTIVO
-    return {"running": AGENTE_ACTIVO}
+def agent_toggle(request: Request) -> dict:
+    usuario = _get_current_user(request)
+    if not usuario:
+        return {"error": "unauthorized"}
+    user_info = _user_info(usuario)
+    nuevo_estado = not user_info["agente_activo"]
+    from .db import actualizar_configuracion_usuario
+    actualizar_configuracion_usuario(user_info["id"], agente_activo=int(nuevo_estado))
+    return {"running": nuevo_estado}
 
 
 @app.post("/scan-json")
-def scan_json() -> dict:
-    if not AGENTE_ACTIVO:
+def scan_json(request: Request) -> dict:
+    usuario = _get_current_user(request)
+    if not usuario:
         return {"processed": 0, "running": False}
-    procesados = _ejecutar_scan()
+    user_info = _user_info(usuario)
+    if not user_info["agente_activo"]:
+        return {"processed": 0, "running": False}
+    procesados = _ejecutar_scan(user_info)
     return {"processed": procesados, "running": True}
+
+
+@app.post("/settings/update")
+def settings_update(
+    request: Request,
+    gemini_api_key: str | None = Form(default=None),
+    gmail_user: str | None = Form(default=None),
+    gmail_password: str | None = Form(default=None),
+    scan_batch: int = Form(default=10),
+    scan_max: int = Form(default=100),
+) -> RedirectResponse:
+    usuario = _get_current_user(request)
+    if not usuario:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    user_info = _user_info(usuario)
+    
+    from .db import actualizar_configuracion_usuario
+    actualizar_configuracion_usuario(
+        user_info["id"],
+        gemini_api_key=gemini_api_key,
+        gmail_user=gmail_user,
+        gmail_password=gmail_password,
+        scan_batch=scan_batch,
+        scan_max=scan_max
+    )
+    return RedirectResponse(url="/?view=settings&toast=config_actualizada", status_code=303)
 
 
 @app.post("/translate-json")

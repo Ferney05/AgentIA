@@ -24,7 +24,7 @@ def crear_base_de_datos(nombre_bd: str = "kyber.db") -> None:
     p = _get_placeholder()
 
     is_pg = os.environ.get("DATABASE_URL")
-    print(f"DEBUG: Ejecutando crear_base_de_datos. is_pg={bool(is_pg)}")
+    print(f"DEBUG: Iniciando creación/verificación de base de datos. is_pg={bool(is_pg)}")
 
     if is_pg:
         # PostgreSQL specific table creation

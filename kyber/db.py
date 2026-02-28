@@ -20,164 +20,74 @@ def _get_placeholder():
 
 def crear_base_de_datos(nombre_bd: str = "kyber.db") -> None:
     db_url = os.environ.get("DATABASE_URL")
-    print(f"DEBUG: Iniciando crear_base_de_datos. DATABASE_URL configurada: {bool(db_url)}")
+    print(f"DEBUG: [DB] Iniciando creación de tablas. PG={bool(db_url)}")
     
     conn = _get_connection()
+    if db_url:
+        conn.autocommit = True
     cursor = conn.cursor()
-    p = _get_placeholder()
 
-    is_pg = bool(db_url)
+    # 1. Crear tabla usuarios
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id SERIAL PRIMARY KEY,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            creado_en TEXT NOT NULL,
+            gemini_api_key TEXT,
+            gmail_user TEXT,
+            gmail_password TEXT,
+            scan_batch INTEGER DEFAULT 10,
+            scan_max INTEGER DEFAULT 100,
+            agente_activo INTEGER DEFAULT 0
+        )
+    """)
+    print("DEBUG: [DB] Tabla usuarios verificada/creada.")
 
-    if is_pg:
-        # PostgreSQL specific table creation
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS usuarios (
-                id SERIAL PRIMARY KEY,
-                email TEXT NOT NULL UNIQUE,
-                password_hash TEXT NOT NULL,
-                creado_en TEXT NOT NULL,
-                gemini_api_key TEXT,
-                gmail_user TEXT,
-                gmail_password TEXT,
-                scan_batch INTEGER DEFAULT 10,
-                scan_max INTEGER DEFAULT 100,
-                agente_activo INTEGER DEFAULT 0
-            );
-            """
+    # 2. Crear tabla reglas
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS reglas (
+            id SERIAL PRIMARY KEY,
+            clave TEXT NOT NULL,
+            instruccion TEXT NOT NULL,
+            usuario_id INTEGER,
+            prioridad INTEGER DEFAULT 3,
+            tipo TEXT DEFAULT 'negocio',
+            etiquetas TEXT DEFAULT '',
+            es_principal INTEGER DEFAULT 0
         )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS reglas (
-                id SERIAL PRIMARY KEY,
-                clave TEXT NOT NULL,
-                instruccion TEXT NOT NULL,
-                usuario_id INTEGER,
-                prioridad INTEGER,
-                tipo TEXT,
-                etiquetas TEXT,
-                es_principal INTEGER
-            );
-            """
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS logs (
-                id SERIAL PRIMARY KEY,
-                fecha TEXT NOT NULL,
-                remitente TEXT,
-                asunto TEXT,
-                resumen TEXT,
-                accion TEXT,
-                idioma TEXT,
-                categoria TEXT,
-                usuario_id INTEGER
-            );
-            """
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS respuestas (
-                id SERIAL PRIMARY KEY,
-                titulo TEXT NOT NULL,
-                contenido TEXT NOT NULL,
-                usuario_id INTEGER
-            );
-            """
-        )
-    else:
-        # SQLite specific table creation
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS usuarios (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                email TEXT NOT NULL UNIQUE,
-                password_hash TEXT NOT NULL,
-                creado_en TEXT NOT NULL,
-                gemini_api_key TEXT,
-                gmail_user TEXT,
-                gmail_password TEXT,
-                scan_batch INTEGER DEFAULT 10,
-                scan_max INTEGER DEFAULT 100,
-                agente_activo INTEGER DEFAULT 0
-            );
-            """
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS reglas (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                clave TEXT NOT NULL,
-                instruccion TEXT NOT NULL,
-                usuario_id INTEGER,
-                prioridad INTEGER,
-                tipo TEXT,
-                etiquetas TEXT,
-                es_principal INTEGER
-            );
-            """
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                fecha TEXT NOT NULL,
-                remitente TEXT,
-                asunto TEXT,
-                resumen TEXT,
-                accion TEXT,
-                idioma TEXT,
-                categoria TEXT,
-                usuario_id INTEGER
-            );
-            """
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS respuestas (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                titulo TEXT NOT NULL,
-                contenido TEXT NOT NULL,
-                usuario_id INTEGER
-            );
-            """
-        )
+    """)
+    print("DEBUG: [DB] Tabla reglas verificada/creada.")
 
-    # Migraciones/Actualizaciones de columnas
-    tablas_columnas = {
-        "usuarios": [
-            ("gemini_api_key", "TEXT"),
-            ("gmail_user", "TEXT"),
-            ("gmail_password", "TEXT"),
-            ("scan_batch", "INTEGER DEFAULT 10"),
-            ("scan_max", "INTEGER DEFAULT 100"),
-            ("agente_activo", "INTEGER DEFAULT 0")
-        ],
-        "reglas": [
-            ("usuario_id", "INTEGER"),
-            ("prioridad", "INTEGER"),
-            ("tipo", "TEXT"),
-            ("etiquetas", "TEXT"),
-            ("es_principal", "INTEGER")
-        ],
-        "logs": [
-            ("categoria", "TEXT"),
-            ("usuario_id", "INTEGER")
-        ],
-        "respuestas": [
-            ("usuario_id", "INTEGER")
-        ]
-    }
+    # 3. Crear tabla logs
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS logs (
+            id SERIAL PRIMARY KEY,
+            fecha TEXT NOT NULL,
+            remitente TEXT,
+            asunto TEXT,
+            resumen TEXT,
+            accion TEXT,
+            idioma TEXT,
+            categoria TEXT DEFAULT 'GENERAL',
+            usuario_id INTEGER
+        )
+    """)
+    print("DEBUG: [DB] Tabla logs verificada/creada.")
 
-    for tabla, columnas in tablas_columnas.items():
-        for col_nombre, col_tipo in columnas:
-            try:
-                cursor.execute(f"ALTER TABLE {tabla} ADD COLUMN {col_nombre} {col_tipo}")
-            except Exception:
-                pass
+    # 4. Crear tabla respuestas
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS respuestas (
+            id SERIAL PRIMARY KEY,
+            titulo TEXT NOT NULL,
+            contenido TEXT NOT NULL,
+            usuario_id INTEGER
+        )
+    """)
+    print("DEBUG: [DB] Tabla respuestas verificada/creada.")
 
-    conn.commit()
     conn.close()
+    print("DEBUG: [DB] Proceso de inicialización finalizado.")
 
 def insertar_regla(
     clave: str,

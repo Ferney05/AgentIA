@@ -19,12 +19,14 @@ def _get_placeholder():
     return "%s" if os.environ.get("DATABASE_URL") else "?"
 
 def crear_base_de_datos(nombre_bd: str = "kyber.db") -> None:
+    db_url = os.environ.get("DATABASE_URL")
+    print(f"DEBUG: Iniciando crear_base_de_datos. DATABASE_URL configurada: {bool(db_url)}")
+    
     conn = _get_connection()
     cursor = conn.cursor()
     p = _get_placeholder()
 
-    is_pg = os.environ.get("DATABASE_URL")
-    print(f"DEBUG: Iniciando creación/verificación de base de datos. is_pg={bool(is_pg)}")
+    is_pg = bool(db_url)
 
     if is_pg:
         # PostgreSQL specific table creation

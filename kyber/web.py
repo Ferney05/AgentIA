@@ -107,6 +107,7 @@ def _user_info(usuario):
 
 @app.on_event("startup")
 def startup() -> None:
+    print("DEBUG: Evento startup disparado.")
     crear_base_de_datos()
 
 

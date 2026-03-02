@@ -23,13 +23,13 @@ def obtener_ids_no_leidos(max_total: int | None = None, usuario: str | None = No
     conexion = _abrir_conexion(usuario, clave_app)
     conexion.select("INBOX")
     
-    # Construir el comando de búsqueda
-    # IMAP SEARCH UNSEEN SINCE 27-Feb-2026
+    # Construir el comando de búsqueda: correos no leídos desde una fecha.
+    # El comando 'SEARCH' no debe incluir el nombre de la carpeta (INBOX), ya que se seleccionó arriba.
+    search_criteria = 'UNSEEN'
     if desde_fecha:
-        search_criteria = f'UNSEEN SINCE {desde_fecha}'
-    else:
-        search_criteria = "UNSEEN"
+        search_criteria += f' SINCE {desde_fecha}'
     
+    print(f"DEBUG: Criterio de búsqueda IMAP: {search_criteria}")
     estado, datos = conexion.search(None, search_criteria)
     ids = datos[0].split()
     conexion.logout()

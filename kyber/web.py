@@ -390,12 +390,11 @@ def _ejecutar_scan(user_info: dict) -> int:
     ahora = ahora_dt.isoformat()
     
     # Lógica de fecha para el escaneo:
-    # Restamos un día adicional para asegurar que capturamos correos que pudieron llegar tarde ayer
-    # o por diferencias de zona horaria del servidor.
+    # Lunes: leer desde el sábado. Martes a Viernes: leer solo hoy.
     if ahora_dt.weekday() == 0:  # Lunes
-        dias_atras = 3 # Desde el Viernes/Sábado
+        dias_atras = 2 # Sábado, Domingo, Lunes
     else:
-        dias_atras = 1 # Desde ayer
+        dias_atras = 0 # Solo hoy
     
     fecha_inicio = ahora_dt - timedelta(days=dias_atras)
     # Formato IMAP: "DD-Mon-YYYY" (ej: "27-Feb-2026")
@@ -413,13 +412,22 @@ def _ejecutar_scan(user_info: dict) -> int:
         return 0
 
     print(f"DEBUG: Iniciando escaneo para {gmail_user} desde {desde_fecha_imap}")
-    ids = obtener_ids_no_leidos(max_total, usuario=gmail_user, clave_app=gmail_pwd, desde_fecha=desde_fecha_imap)
-    print(f"DEBUG: IDs encontrados: {len(ids)}")
+    try:
+        ids = obtener_ids_no_leidos(max_total, usuario=gmail_user, clave_app=gmail_pwd, desde_fecha=desde_fecha_imap)
+        print(f"DEBUG: IDs encontrados: {len(ids)}")
+    except Exception as e:
+        print(f"DEBUG: Error en obtener_ids_no_leidos: {e}")
+        raise e
 
     total = 0
     for i in range(0, len(ids), batch):
         chunk = ids[i : i + batch]
-        correos = obtener_correos_por_ids(chunk, usuario=gmail_user, clave_app=gmail_pwd)
+        try:
+            correos = obtener_correos_por_ids(chunk, usuario=gmail_user, clave_app=gmail_pwd)
+            print(f"DEBUG: Correos obtenidos en chunk: {len(correos)}")
+        except Exception as e:
+            print(f"DEBUG: Error en obtener_correos_por_ids: {e}")
+            raise e
 
         ids_para_marcar: list[str] = []
         ids_para_no_leer: list[str] = []
@@ -500,49 +508,48 @@ def _ejecutar_scan(user_info: dict) -> int:
 
             categoria = (resultado.get("categoria") or "").upper()
             
-            # SI LA IA DICE QUE ES ANUNCIO, LE CREEMOS DE INMEDIATO
+            # LÓGICA DE ANUNCIOS: Bloqueo absoluto
+            # Si la IA clasifica como ANUNCIO, marcamos leído y NO guardamos nada en DB.
             if categoria == "ANUNCIO":
-                es_cotizacion = False
-                resultado["accion"] = "NADA"
-                resultado["borrador"] = ""
-                # Lo marcamos para leer para que no estorbe
+                print(f"DEBUG: ANUNCIO detectado. Marcando como leído y saltando. Asunto: {correo.get('asunto')}")
                 if correo["id"] not in ids_para_marcar:
                     ids_para_marcar.append(correo["id"])
-            else:
-                # Solo si NO es anuncio, buscamos señales de cotización
-                palabras_cot = (
-                    "cotiz" in asunto_min
-                    or "cotiz" in cuerpo_min
-                    or "presupuesto" in asunto_min
-                    or "presupuesto" in cuerpo_min
-                    or "quote" in asunto_min
-                    or "quote" in cuerpo_min
-                    or "quotation" in asunto_min
-                    or "quotation" in cuerpo_min
-                )
-                # "precio" es muy común en spam, solo lo usamos si hay otras señales claras
-                señal_precio = "precio" in asunto_min or "precio" in cuerpo_min
-                
-                marcas = ["caterpillar", "cat", "john deere", "komatsu", "hitachi", "volvo", "case", "tcm"]
-                menciona_marca = any(m in asunto_min or m in cuerpo_min for m in marcas)
-                modelo_pat1 = r"\b\d{2,4}[A-Z]\b"
-                modelo_pat2 = r"\b[A-Z]{3,}\s?\d{2,4}[A-Z]?\b"
-                posible_modelo = bool(
-                    re.search(modelo_pat1, asunto_u) or re.search(modelo_pat1, cuerpo_u) or
-                    re.search(modelo_pat2, asunto_u) or re.search(modelo_pat2, cuerpo_u)
-                )
-                pn_hyphen = bool(re.search(r"\b[0-9A-Z]{1,5}-[0-9A-Z]{3,}\b", asunto_u) or re.search(r"\b[0-9A-Z]{1,5}-[0-9A-Z]{3,}\b", cuerpo_u))
-                pn_plain = bool(re.search(r"\b[0-9A-Z]{7,}\b", asunto_u) or re.search(r"\b[0-9A-Z]{7,}\b", cuerpo_u))
-                tiene_pn = pn_hyphen or pn_plain
-                tiene_serial = bool(re.search(r"\b[0-9A-Z\-]{10,}\b", asunto_u) or re.search(r"\b[0-9A-Z\-]{10,}\b", cuerpo_u))
-                
-                es_cotizacion = (
-                    categoria == "COTIZACIONES"
-                    or palabras_cot
-                    or (tiene_imagen and señal_precio)
-                    or (menciona_marca and posible_modelo)
-                    or ("favor" in asunto_min and posible_modelo)
-                )
+                continue # ¡SALTAR AL SIGUIENTE CORREO!
+
+            # Si llegamos aquí, NO ES ANUNCIO. Procedemos a guardar en logs.
+            palabras_cot = (
+                "cotiz" in asunto_min
+                or "cotiz" in cuerpo_min
+                or "presupuesto" in asunto_min
+                or "presupuesto" in cuerpo_min
+                or "quote" in asunto_min
+                or "quote" in cuerpo_min
+                or "quotation" in asunto_min
+                or "quotation" in cuerpo_min
+            )
+            # "precio" es muy común en spam, solo lo usamos si hay otras señales claras
+            señal_precio = "precio" in asunto_min or "precio" in cuerpo_min
+            
+            marcas = ["caterpillar", "cat", "john deere", "komatsu", "hitachi", "volvo", "case", "tcm"]
+            menciona_marca = any(m in asunto_min or m in cuerpo_min for m in marcas)
+            modelo_pat1 = r"\b\d{2,4}[A-Z]\b"
+            modelo_pat2 = r"\b[A-Z]{3,}\s?\d{2,4}[A-Z]?\b"
+            posible_modelo = bool(
+                re.search(modelo_pat1, asunto_u) or re.search(modelo_pat1, cuerpo_u) or
+                re.search(modelo_pat2, asunto_u) or re.search(modelo_pat2, cuerpo_u)
+            )
+            pn_hyphen = bool(re.search(r"\b[0-9A-Z]{1,5}-[0-9A-Z]{3,}\b", asunto_u) or re.search(r"\b[0-9A-Z]{1,5}-[0-9A-Z]{3,}\b", cuerpo_u))
+            pn_plain = bool(re.search(r"\b[0-9A-Z]{7,}\b", asunto_u) or re.search(r"\b[0-9A-Z]{7,}\b", cuerpo_u))
+            tiene_pn = pn_hyphen or pn_plain
+            tiene_serial = bool(re.search(r"\b[0-9A-Z\-]{10,}\b", asunto_u) or re.search(r"\b[0-9A-Z\-]{10,}\b", cuerpo_u))
+            
+            es_cotizacion = (
+                categoria == "COTIZACIONES"
+                or palabras_cot
+                or (tiene_imagen and señal_precio)
+                or (menciona_marca and posible_modelo)
+                or ("favor" in asunto_min and posible_modelo)
+            )
 
             if es_cotizacion:
                 categoria = "COTIZACIONES"
@@ -682,15 +689,24 @@ def agent_status(request: Request) -> dict:
 
 
 @app.post("/agent/toggle")
-def agent_toggle(request: Request) -> dict:
+def agent_toggle(request: Request) -> RedirectResponse:
     usuario = _get_current_user(request)
     if not usuario:
-        return {"error": "unauthorized"}
+        return RedirectResponse(url="/auth/login", status_code=303)
+    
     user_info = _user_info(usuario)
-    nuevo_estado = not user_info["agente_activo"]
+    nuevo_estado_bool = not user_info["agente_activo"]
+    
+    # Si intenta activar pero no tiene credenciales, avisamos pero no lo sacamos del dashboard
+    if nuevo_estado_bool:
+        if not user_info.get("gemini_api_key") or not user_info.get("gmail_user"):
+            return RedirectResponse(url="/?toast=scan_error", status_code=303)
+
     from .db import actualizar_configuracion_usuario
-    actualizar_configuracion_usuario(user_info["id"], agente_activo=int(nuevo_estado))
-    return {"running": nuevo_estado}
+    actualizar_configuracion_usuario(user_info["id"], agente_activo=int(nuevo_estado_bool))
+    
+    toast = "agent_on" if nuevo_estado_bool else "agent_off"
+    return RedirectResponse(url=f"/?toast={toast}", status_code=303)
 
 
 @app.post("/scan-json")

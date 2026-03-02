@@ -124,6 +124,13 @@ def procesar_correo_con_ia(
     plantillas_texto = _plantillas_como_texto()
     extras_texto = _tareas_politicas_como_texto()
 
+    cuerpo = re.sub(r'<[^>]+>', '', cuerpo)
+    cuerpo = re.sub(r'https?://\S+', '', cuerpo)
+    cuerpo = re.sub(r'\s+', ' ', cuerpo).strip()
+    # Cortar firmas largas o legales innecesarias para acelerar el análisis
+    cuerpo = cuerpo[:2000] # Limitar a 2000 caracteres
+
+    # Prompt optimizado para análisis profundo de repuestos
     prompt = f"""
 
     Eres KYBER, un agente experto en gestión de bandejas de entrada de Gmail.
@@ -161,10 +168,11 @@ def procesar_correo_con_ia(
     - NÚMERO DE PIEZA o PART NUMBER (por ejemplo: "5P-3856", "5V3949", "87682993", "450-6789"). Un número de pieza válido debe tener como mínimo 7 caracteres alfanuméricos (letras y/o números) y puede incluir guion.
     Ten en cuenta que, para el usuario, el SERIAL o el NÚMERO DE PIEZA suelen ser suficientes para poder cotizar aunque falte el modelo; en cambio, tener solo el modelo sin serial ni número de pieza no es suficiente para cotizar.
     3. Determina el tipo de correo incluso si el texto es muy corto, poco claro o sin asunto:
-    - "cotizacion_incompleta": el cliente quiere una cotización pero NO envía ni serial ni número de pieza (puede que envíe solo modelo, solo nombre del producto, solo una referencia parcial o solo una foto) o falta otra información crítica sin la cual no se pueda cotizar.
-    - "cotizacion_completa": el cliente quiere una cotización y entrega el serial o un número de pieza (y opcionalmente el modelo) o suficiente información técnica para cotizar sin pedir más datos. No necesitas que el correo diga literalmente "cotizar": basta con que aparezcan modelo/serial/part number de forma que sea evidente que pide precio o repuestos.
-    - "pregunta_general": dudas o preguntas después de que ya se envió una cotización, o consultas generales sobre productos, disponibilidad, tiempos, etc.
-    - "anuncio": correos de marketing, publicidad, newsletters, nuevas temporadas, promociones, descuentos, lanzamientos, etc.
+       - "cotizacion_incompleta": el cliente quiere cotización pero NO envía ni serial ni número de pieza.
+         * IMPORTANTE: Si menciona MODELO (ej: "312D") y PIEZAS (ej: "cadena", "sprockets", "rodillos"), PERO falta el SERIAL o detalles técnicos (ej: superior/inferior), clasifícalo como "cotizacion_incompleta" y pide esos datos específicos.
+       - "cotizacion_completa": el cliente quiere cotización y entrega el serial o un número de pieza válido.
+       - "pregunta_general": dudas post-cotización o consultas generales.
+       - "anuncio": correos de marketing, publicidad, newsletters.
     4. Antes de redactar nada, revisa si alguna PLANTILLA se ajusta claramente a la petición del cliente.
     - Analiza tanto el TITULO como el TEXTO_COMPLETO de cada plantilla y compáralos con el asunto, el cuerpo y el historial del hilo. Elige solo la plantilla cuya intención coincida claramente con la pregunta del cliente. Si no hay coincidencia clara o tienes duda, no uses ninguna plantilla y deja "plantilla_id" = 0.
     - Si el correo es una cotización INCOMPLETA y el cliente NO envió ni serial ni número de pieza (puede que tampoco envíe modelo, incluso si la información solo aparece en una imagen adjunta):
@@ -172,11 +180,10 @@ def procesar_correo_con_ia(
         - "accion" = "BORRADOR".
         - "plantilla_id" = ID de esa plantilla.
         - Copia el TEXTO_COMPLETO de esa plantilla directamente en "borrador", sin cambiar ni añadir nada.
-    - Si el correo es una cotización INCOMPLETA y el cliente envió modelo pero no serial ni número de pieza (aunque el modelo solo se vea en una imagen):
-        - Puedes usar la plantilla como referencia de estilo, pero en ese caso NO debes usar "plantilla_id". En lugar de eso:
-        - "plantilla_id" = 0.
-        - Redacta un borrador muy corto (1–2 frases máximo) que pida solo el serial que falta, adaptando el estilo de la plantilla y sin añadir explicaciones largas ni contenido que no sea necesario.
-    - Si el cliente envía serial (aunque falte modelo), trátalo como "cotizacion_completa" y no pidas más datos; no crees borrador solo para solicitar modelo.
+    - Si el correo es una cotización INCOMPLETA (falta serial o número de pieza):
+         - PRIMERO: Busca si hay una PLANTILLA configurada para pedir datos o seriales. Si la hay, ÚSALA ("plantilla_id" = ID de esa plantilla).
+         - SEGUNDO: Solo si NO hay plantilla adecuada, redacta tú el borrador directo: "Hola, para cotizar [PIEZA] de [MODELO], necesito el NÚMERO DE SERIE...".
+    - Si el cliente envía serial (aunque falte modelo), trátalo como "cotizacion_completa".
     - Para otras situaciones donde una PLANTILLA coincida exactamente con la pregunta (por ejemplo, explicar original vs reemplazo):
         - "accion" = "BORRADOR".
         - "plantilla_id" = ID numérico de esa plantilla.

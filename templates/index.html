@@ -89,6 +89,7 @@
         <button
           id="kyber-toggle"
           type="button"
+          data-active="{{ '1' if user.agente_activo else '0' }}"
           class="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-100 shadow hover:bg-slate-700"
         >
           <span id="kyber-toggle-icon"></span>
@@ -893,35 +894,34 @@
       let bg = "linear-gradient(to right, #22c55e, #14b8a6)";
 
       if (toast === "config_actualizada") {
-        msg = "Configuración actualizada correctamente";
+        text = "Configuración actualizada correctamente";
         bg = "linear-gradient(to right, #10b981, #059669)";
-      }
-      if (toast === "scan_empty") {
-        msg = "No se encontraron correos nuevos para procesar.";
+      } else if (toast === "scan_empty") {
+        text = "No se encontraron correos nuevos para procesar.";
         bg = "linear-gradient(to right, #64748b, #334155)";
-      }
-      if (toast === "scan_quota_error") {
-        msg = "Límite de Google Gemini alcanzado. Por favor, espera unos minutos e intenta de nuevo.";
+      } else if (toast === "scan_quota_error") {
+        text = "Límite de Google Gemini alcanzado. Por favor, espera unos minutos e intenta de nuevo.";
         bg = "linear-gradient(to right, #f59e0b, #d97706)";
-      }
-      if (toast === "scan_error") {
-        msg = "Hubo un problema técnico al escanear. Revisa tus credenciales en Configuración.";
+      } else if (toast === "scan_error") {
+        text = "Hubo un problema técnico al escanear. Revisa tus credenciales en Configuración.";
         bg = "linear-gradient(to right, #ef4444, #b91c1c)";
-      }
-      if (toast === "scan_ok") {
-        const count = new URLSearchParams(window.location.search).get("count");
-        msg = count ? `Escaneo finalizado: ${count} correos procesados.` : "Escaneo finalizado correctamente.";
+      } else if (toast === "agent_on") {
+        text = "Agente automático ACTIVADO. Escaneará en segundo plano.";
+        bg = "linear-gradient(to right, #22c55e, #16a34a)";
+      } else if (toast === "agent_off") {
+        text = "Agente automático DESACTIVADO.";
+        bg = "linear-gradient(to right, #64748b, #334155)";
+      } else if (toast === "scan_ok") {
+        const count = params.get("count");
+        text = count ? `Escaneo finalizado: ${count} correos procesados.` : "Escaneo finalizado correctamente.";
         bg = "linear-gradient(to right, #10b981, #059669)";
-      }
-      if (toast === "regla_creada") {
+      } else if (toast === "regla_creada") {
         text = "Regla creada correctamente";
       } else if (toast === "regla_editada") {
         text = "Regla actualizada correctamente";
       } else if (toast === "regla_eliminada") {
         text = "Regla eliminada";
         bg = "linear-gradient(to right, #f97373, #e11d48)";
-      } else if (toast === "scan_ok") {
-        text = "Escaneo completado";
       } else if (toast === "respuesta_creada") {
         text = "Respuesta guardada";
       } else if (toast === "respuesta_editada") {
@@ -934,7 +934,7 @@
       }
 
       Toastify({
-        text,
+        text: text,
         duration: 4000,
         gravity: "top",
         position: "right",
@@ -947,19 +947,12 @@
     })();
 
     function kyberScanOnce(form) {
-      var btn = document.getElementById("btn-scan-once");
+      const btn = document.getElementById("btn-scan-once");
       if (!btn) return true;
-      if (btn.dataset.loading === "1") {
-        return false;
-      }
-      btn.dataset.loading = "1";
       btn.disabled = true;
       btn.classList.add("opacity-70", "cursor-not-allowed");
-      var originalHtml = btn.innerHTML;
-      btn.dataset.original = originalHtml;
-      btn.innerHTML =
-        '<span class="inline-flex items-center gap-2"><span class="h-3 w-3 animate-spin rounded-full border border-slate-900 border-t-slate-50"></span>Ejecutando…</span>';
-      return true;
+      btn.innerHTML = '<span class="inline-flex items-center gap-2"><span class="h-3 w-3 animate-spin rounded-full border border-slate-900 border-t-slate-50"></span>Escaneando…</span>';
+      return true; 
     }
 
     function toggleVisibility(id) {
@@ -971,70 +964,55 @@
       }
     }
 
+    // --- Lógica del Historial en Tiempo Real ---
     (function () {
-      const btn = document.getElementById("kyber-toggle");
-      const iconSpan = document.getElementById("kyber-toggle-icon");
-      const textSpan = document.getElementById("kyber-toggle-text");
-      if (!btn || !iconSpan || !textSpan) return;
+      const isAgentActive = document.getElementById("kyber-toggle")?.getAttribute("data-active") === "1";
+      if (!isAgentActive) return;
 
-      let running = false;
-
-      function render() {
-        if (running) {
-          iconSpan.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><path fill="#e5e7eb" d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>';
-          textSpan.textContent = "Pausar";
-          btn.classList.remove("bg-slate-800", "text-slate-100");
-          btn.classList.add("bg-rose-500/90", "text-slate-950", "kyber-pulse");
-        } else {
-          iconSpan.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><path fill="#e5e7eb" d="M8 5v14l11-7z"/></svg>';
-          textSpan.textContent = "Ejecutar";
-          btn.classList.remove("bg-rose-500/90", "text-slate-950");
-          btn.classList.remove("kyber-pulse");
-          btn.classList.add("bg-slate-800", "text-slate-100");
-        }
-      }
-
-      async function syncStatus() {
-        try {
-          const res = await fetch("/agent/status");
-          const data = await res.json();
-          running = !!data.running;
-          render();
-        } catch (e) {}
-      }
-
-      btn.addEventListener("click", async function () {
-        try {
-          const res = await fetch("/agent/toggle", { method: "POST" });
-          const data = await res.json();
-          running = !!data.running;
-          render();
-          if (typeof Toastify !== "undefined") {
-            Toastify({
-              text: running ? "KYBER ejecutándose en automático" : "KYBER en pausa",
-              duration: 3000,
-              gravity: "top",
-              position: "right",
-              close: true,
-              style: {
-                background: running
-                  ? "linear-gradient(to right, #22c55e, #14b8a6)"
-                  : "linear-gradient(to right, #4b5563, #020617)",
-              },
-            }).showToast();
-          }
-        } catch (e) {}
-      });
+      console.log("DEBUG: Agente activo, iniciando auto-actualización cada 60s.");
 
       setInterval(async function () {
-        if (!running) return;
         try {
-          await fetch("/scan-json", { method: "POST" });
-        } catch (e) {}
-      }, 60000);
+          // Intentar un escaneo silencioso en segundo plano
+          const res = await fetch("/scan-json", { method: "POST" });
+          const data = await res.json();
+          
+          if (data && data.procesados > 0) {
+            console.log(`DEBUG: Se procesaron ${data.procesados} correos. Recargando datos...`);
+            // Recargamos la sección del historial suavemente
+            window.location.reload(); 
+          }
+        } catch (e) {
+          console.error("Error en auto-escaneo:", e);
+        }
+      }, 60000); // 60 segundos
+    })();
 
-      syncStatus();
-      render();
+    // --- Lógica del Botón Ejecutar/Pausar ---
+    (function () {
+      const btn = document.getElementById("kyber-toggle");
+      if (!btn) return;
+
+      const isAgentActive = btn.getAttribute("data-active") === "1";
+      const textSpan = document.getElementById("kyber-toggle-text");
+      const iconSpan = document.getElementById("kyber-toggle-icon");
+
+      if (isAgentActive) {
+        if (textSpan) textSpan.textContent = "Pausar";
+        if (iconSpan) iconSpan.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><path fill="currentColor" d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>';
+        
+        // Quitar clases de color inactivo y poner el rojo brillante
+        btn.classList.remove("bg-slate-800", "text-slate-100");
+        btn.classList.add("bg-rose-600", "text-white", "animate-pulse", "shadow-[0_0_15px_rgba(225,29,72,0.5)]");
+      }
+
+      btn.onclick = function() {
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = "/agent/toggle";
+        document.body.appendChild(form);
+        form.submit();
+      };
     })();
 
     (function () {

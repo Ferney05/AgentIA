@@ -20,9 +20,7 @@ def _reglas_como_texto() -> str:
     items: List[tuple[int, str, str, str]] = []
     for _, clave, instruccion, prioridad, tipo, etiquetas, es_principal in reglas:
         tipo_norm = (tipo or "negocio").lower()
-        # Excluir 'firma' del prompt, ya que se agrega programáticamente
-        if tipo_norm == "firma":
-            continue
+        # Solo incluir reglas de tipo 'negocio' aquí
         if tipo_norm != "negocio":
             continue
         try:
@@ -30,15 +28,44 @@ def _reglas_como_texto() -> str:
         except Exception:
             prio_val = 3
         linea = f"[PRIORIDAD {prio_val}] {clave}: {instruccion}"
-        if (etiquetas or "").strip():
-            linea = f"{linea} (Etiquetas: {(etiquetas or '').strip()})"
-        etiqueta_orden = (etiquetas or "").strip().lower()
-        items.append((prio_val, etiqueta_orden, str(clave), linea))
-    # Orden: prioridad ASC (1, 2, 3...), luego etiqueta asc, luego clave asc
-    items.sort(key=lambda x: (x[0], x[1], x[2]))
-    partes = [linea for _, _, _, linea in items]
-    texto = "\n\n".join(partes)
-    return texto if texto else "Sin reglas adicionales; usa buen criterio profesional."
+        items.append((prio_val, str(clave), linea))
+    # Orden: prioridad ASC (1, 2, 3...)
+    items.sort(key=lambda x: (x[0], x[1]))
+    partes = [linea for _, _, linea in items]
+    texto = "\n".join(partes)
+    return texto if texto else "Sin reglas de negocio específicas."
+
+
+def _tareas_politicas_como_texto() -> tuple[str, str]:
+    reglas = obtener_reglas()
+    tareas_items: List[tuple[int, str]] = []
+    politicas_items: List[tuple[int, str]] = []
+    
+    for _, clave, instruccion, prioridad, tipo, etiquetas, _ in reglas:
+        tipo_norm = (tipo or "").lower()
+        try:
+            prio_val = int(prioridad)
+        except Exception:
+            prio_val = 3
+            
+        linea = f"[PRIORIDAD {prio_val}] {clave}: {instruccion}"
+        
+        if tipo_norm == "tarea":
+            tareas_items.append((prio_val, linea))
+        elif tipo_norm == "politica":
+            politicas_items.append((prio_val, linea))
+            
+    # Ordenar por prioridad ASC (1, 2, 3...)
+    tareas_items.sort(key=lambda x: x[0])
+    politicas_items.sort(key=lambda x: x[0])
+    
+    tareas_str = "\n".join([x[1] for x in tareas_items])
+    politicas_str = "\n".join([x[1] for x in politicas_items])
+    
+    return (
+        tareas_str if tareas_str else "Sin tareas adicionales.",
+        politicas_str if politicas_str else "Sin políticas adicionales."
+    )
 
 
 def _plantillas_como_texto() -> str:
@@ -49,27 +76,6 @@ def _plantillas_como_texto() -> str:
     if not partes:
         return "No hay plantillas configuradas; si no encuentras coincidencia clara, redacta un borrador normal."
     return "\n".join(partes)
-
-
-def _tareas_politicas_como_texto() -> str:
-    reglas = obtener_reglas()
-    tareas: List[str] = []
-    politicas: List[str] = []
-    for _, clave, instruccion, prioridad, tipo, etiquetas, _ in reglas:
-        tipo_norm = (tipo or "").lower()
-        linea = f"[PRIORIDAD {prioridad}] {clave}: {instruccion}"
-        if (etiquetas or "").strip():
-            linea = f"{linea} (Etiquetas: {(etiquetas or '').strip()})"
-        if tipo_norm == "tarea":
-            tareas.append(linea)
-        elif tipo_norm == "politica":
-            politicas.append(linea)
-    bloques: List[str] = []
-    if tareas:
-        bloques.append("TAREAS ADICIONALES:\n" + "\n".join(tareas))
-    if politicas:
-        bloques.append("POLITICAS ADICIONALES:\n" + "\n".join(politicas))
-    return "\n\n".join(bloques) if bloques else "Sin tareas o políticas adicionales configuradas."
 
 
 def traducir_texto(texto: str, direccion: str, api_key: str | None = None) -> str:
@@ -120,133 +126,79 @@ def procesar_correo_con_ia(
     imagen_datos: bytes | None = None,
     historial_texto: str | None = None,
     api_key: str | None = None,
+    contexto_negocio: str | None = None,
 ) -> Dict[str, str]:
     """Procesa un correo electrónico utilizando IA para clasificarlo y generar borradores."""
     modelo = _configurar_modelo(api_key)
-    reglas_texto = _reglas_como_texto()
+    reglas_negocio_texto = _reglas_como_texto()
     plantillas_texto = _plantillas_como_texto()
-    extras_texto = _tareas_politicas_como_texto()
+    tareas_texto, politicas_texto = _tareas_politicas_como_texto()
+
+    # Definir el contexto del negocio (Rol del Agente)
+    rol_agente = contexto_negocio if contexto_negocio and contexto_negocio.strip() else "Eres un asistente virtual experto en gestión de correos."
 
     cuerpo = re.sub(r'<[^>]+>', '', cuerpo)
     cuerpo = re.sub(r'https?://\S+', '', cuerpo)
     cuerpo = re.sub(r'\s+', ' ', cuerpo).strip()
-    # Cortar firmas largas o legales innecesarias para acelerar el análisis
-    cuerpo = cuerpo[:2000] # Limitar a 2000 caracteres
+    cuerpo = cuerpo[:3000] # Limitar a 3000 caracteres para tener más contexto
 
-    # Prompt optimizado para análisis profundo de repuestos
+    # Prompt GENÉRICO y ORDENADO
     prompt = f"""
+    ROL Y CONTEXTO DEL NEGOCIO:
+    {rol_agente}
 
-    Eres KYBER, un agente experto en gestión de bandejas de entrada de Gmail.
-    Debes clasificar y redactar borradores siguiendo estrictamente las reglas de negocio del usuario.
-    Las REGLAS DE NEGOCIO son SIEMPRE lo más importante: no tomes decisiones por tu cuenta si alguna regla dice lo contrario o limita lo que debes hacer. Si hay duda entre crear borrador o no, elige NO crear borrador ("accion" = "NADA").
-    Analiza SIEMPRE todo el contenido disponible: asunto (aunque esté vacío o sea poco claro), texto completo del cuerpo, historial del hilo y, si existe, la IMAGEN adjunta (por ejemplo fotos de la máquina, placa, serial, número de pieza o cotizaciones impresas).
+    OBJETIVO PRINCIPAL:
+    Clasificar el correo y, si es necesario, redactar un borrador de respuesta. Debes actuar siguiendo estrictamente el orden de prioridad de las reglas definidas abajo.
 
-    REGLAS DE NEGOCIO:
-    {reglas_texto}
+    --- SECCIÓN 1: REGLAS DE NEGOCIO (Ejecutar en orden de prioridad ascendente: 1, 2, 3...) ---
+    Estas reglas definen QUÉ hacer con el correo.
+    {reglas_negocio_texto}
 
-    PLANTILLAS DISPONIBLES (RESPUESTAS PRECONFIGURADAS):
+    --- SECCIÓN 2: POLÍTICAS (Ejecutar en orden de prioridad ascendente: 1, 2, 3...) ---
+    Estas son normas obligatorias que limitan o guían tu comportamiento.
+    {politicas_texto}
+
+    --- SECCIÓN 3: TAREAS (Ejecutar en orden de prioridad ascendente: 1, 2, 3...) ---
+    Acciones específicas que debes realizar durante el análisis.
+    {tareas_texto}
+
+    --- SECCIÓN 4: PLANTILLAS DISPONIBLES ---
     {plantillas_texto}
 
-    CORREO RECIBIDO:
+    --- CORREO RECIBIDO ---
     - Remitente: {remitente}
     - Asunto: {asunto}
     - Cuerpo:
     {cuerpo}
 
-    HISTORIAL (mensajes recientes en el hilo):
+    HISTORIAL:
     {historial_texto if historial_texto else "Sin historial disponible"}
 
-    TAREAS:
-    1. Detecta el idioma principal del correo.
-    2. Clasificación Crítica (ANUNCIO vs COTIZACIÓN):
-       - "anuncio": Identifica si el correo es marketing, publicidad, newsletter, promociones masivas, o noticias de la industria. 
-         *OJO*: Si el correo tiene un diseño de boletín, muchos enlaces a redes sociales, o lenguaje de "oferta por tiempo limitado", "conoce lo nuevo", "descuentos de temporada", CLASIFÍCALO COMO "ANUNCIO" incluso si menciona repuestos o máquinas.
-       - "cotizacion_completa": El cliente pide explícitamente precios o disponibilidad y proporciona datos técnicos (Serial o Part Number).
-       - "cotizacion_incompleta": El cliente pide precios pero le falta información crítica (como el Serial).
-       - "pregunta_general": Dudas puntuales que no son pedidos de precio ni publicidad.
-
-    3. Detecta si el cliente está pidiendo una cotización y revisa si mencionó explícitamente:
-    -MODELO de la máquina o equipo (por ejemplo: "LOADER 544K", "450G", "301.4C", "215", "205"").
-    - SERIAL de la máquina o equipo (por ejemplo: "1DW544KZHB0634507").
-    - NÚMERO DE PIEZA o PART NUMBER (por ejemplo: "5P-3856", "5V3949", "87682993", "450-6789"). Un número de pieza válido debe tener como mínimo 7 caracteres alfanuméricos (letras y/o números) y puede incluir guion.
-    Ten en cuenta que, para el usuario, el SERIAL o el NÚMERO DE PIEZA suelen ser suficientes para poder cotizar aunque falte el modelo; en cambio, tener solo el modelo sin serial ni número de pieza no es suficiente para cotizar.
-    3. Determina el tipo de correo incluso si el texto es muy corto, poco claro o sin asunto:
-       - "cotizacion_incompleta": el cliente quiere cotización pero NO envía ni serial ni número de pieza.
-         * IMPORTANTE: Si menciona MODELO (ej: "312D") y PIEZAS (ej: "cadena", "sprockets", "rodillos"), PERO falta el SERIAL o detalles técnicos (ej: superior/inferior), clasifícalo como "cotizacion_incompleta" y pide esos datos específicos.
-       - "cotizacion_completa": el cliente quiere cotización y entrega el serial o un número de pieza válido.
-       - "pregunta_general": dudas post-cotización o consultas generales.
-       - "anuncio": correos de marketing, publicidad, newsletters.
-    4. TAREA PRINCIPAL: ANÁLISIS EXHAUSTIVO Y SELECCIÓN DE PLANTILLAS.
-    - ANÁLISIS PROFUNDO: Antes de decidir, LEE Y ANALIZA CUIDADOSAMENTE:
-        * El ASUNTO (puede contener la clave, ej: "Pago", "Cotización").
-        * El CUERPO COMPLETO (busca la intención real detrás del texto).
-        * Los ADJUNTOS (si hay imagen, ¿qué muestra? ¿Un repuesto? ¿Una factura?).
-    - COMPARACIÓN OBLIGATORIA: Debes "leer" mentalmente TODAS las plantillas disponibles en la lista de arriba.
-    - COINCIDENCIA DE INTENCIÓN: No busques solo palabras exactas. Busca el SIGNIFICADO.
-        * Ejemplo: Si el cliente dice "¿A dónde transfiero?", busca plantillas sobre "Métodos de Pago" o "Cuentas Bancarias", aunque no digan la palabra "transfiero".
-    - REGLA DE ORO: SI EXISTE UNA PLANTILLA QUE CUBRA LA INTENCIÓN, ÚSALA.
+    INSTRUCCIONES DE PROCESAMIENTO:
+    1. ANALIZA si el correo es "ANUNCIO" (Spam, Marketing, Newsletter).
+       - SI ES ANUNCIO: Debes responder con "accion": "NADA". ¡IGNÓRALO COMPLETAMENTE!
     
-    - CÓMO USAR LA PLANTILLA:
-        1. Toma el "TEXTO_COMPLETO" de la plantilla seleccionada.
-        2. MANEJO DE VARIABLES FALTANTES (CRÍTICO):
-           - Si la plantilla pide un dato que NO tienes (ej: {{LINK_PAGO}}, [NUM_FACTURA], [PRECIO]):
-           - ¡GENERA EL BORRADOR IGUAL! NO LO DESCARTES.
-           - Deja el marcador explícito en el texto (ej: "[INSERTAR_LINK_AQUI]" o mantén el original {{...}}) para que el usuario humano lo rellene después.
-           - El usuario sabe que debe poner esos datos manualmente. TU TRABAJO ES PREPARAR EL ESQUELETO DEL CORREO.
-        3. Si tienes el dato en el correo del cliente (ej: menciona el modelo), rellénalo.
-        4. NO CAMBIES el tono ni la estructura base de la plantilla.
-    - EJEMPLO: Si la plantilla dice "Pague aquí: {{LINK}}", y no tienes el link, genera el borrador diciendo "Pague aquí: [INSERTAR_LINK]". NO respondas "NADA".
+    2. SI NO ES ANUNCIO, busca una REGLA DE NEGOCIO o POLÍTICA que aplique.
+       - Sigue el orden de prioridad ascendente (1, 2, 3...).
     
-    5. Lógica de decisión (respetando SIEMPRE las reglas de negocio):
-    - Si "cotizacion_completa": "accion" = "NADA" (el humano cotiza).
-    - Si "cotizacion_incompleta":
-        - BUSCA plantilla de "Faltan datos" o "Solicitud de serial".
-        - Si la encuentras: "accion" = "BORRADOR", "plantilla_id" = ID, "borrador" = plantilla adaptada.
-        - Si NO encuentras plantilla adecuada: "accion" = "NADA" (No inventes nada).
-    - Si "anuncio": "accion" = "NADA".
-    - Si "pregunta_general":
-        - REVISA TODAS LAS PLANTILLAS GENERALES (Pagos, Ubicación, Horarios, etc.).
-        - Si alguna coincide con la duda del cliente: "accion" = "BORRADOR", "plantilla_id" = ID, "borrador" = plantilla adaptada.
-        - Si NO existe ninguna plantilla relacionada: "accion" = "NADA".
+    3. SELECCIÓN DE ACCIÓN:
+       - Si una regla dice "No responder" o "Ignorar" -> "accion": "NADA".
+       - Si requiere respuesta -> "accion": "BORRADOR".
+         * Intenta usar una PLANTILLA disponible.
+         * Si usas plantilla, rellena los huecos (placeholders) con la info del correo o déjalos indicados (ej: [PRECIO]).
+         * Si no hay plantilla, redacta una respuesta profesional siguiendo el ROL DEL AGENTE.
 
-    6. PROHIBIDO REDACTAR DESDE CERO.
-    - Si ninguna plantilla encaja con la solicitud del cliente:
-        - "accion" = "NADA".
-        - "resumen_es": DEBES explicar por qué no se actuó. Ejemplo: "No se encontró plantilla adecuada para solicitud de [INTENCIÓN DETECTADA]. Se requiere revisión manual."
-    - Prefiere no responder a inventar una respuesta que no esté homologada en las plantillas.
-
-    7. Asigna también una CATEGORÍA para el log con el campo "categoria":
-    - "COTIZACIONES": ÚSALO SOLO si el cliente pide explícitamente PRECIO, DISPONIBILIDAD o PRESUPUESTO.
-      * IMPORTANTE: Preguntas breves como "¿Cómo pago?", "¿Dónde están ubicados?", "¿Tienen cuenta bancaria?" SON "GENERAL", NO SON COTIZACIONES. No clasifiques como cotización si no hay intención de compra de repuestos/maquinaria.
-    - "ANUNCIO": Para campañas, promociones, newsletters. (Esta categoría sirve para que el sistema ignore el correo automáticamente).
-    - "GENERAL": Para todo lo demás (preguntas administrativas, pagos, dudas breves, saludos sin solicitud de precio).
-    8. Si el correo está en inglés:
-    - Redacta el borrador de respuesta en inglés.
-    - Genera un resumen en español del correo recibido.
-    9. Si el correo está en español:
-    - Redacta el borrador de respuesta en español, a menos que las reglas indiquen otra cosa.
-    - Resume el correo en español.
-    10. En todos los casos:
-    - Responde de forma concreta a lo que pide el cliente.
-    - Evita adornos y texto innecesario.
-    - No menciones la empresa ni quiénes somos.
-    - No añadas firmas, nombres ni datos de contacto al final; el correo ya tiene un pie de página preconfigurado. Limítate al contenido principal del mensaje.  
-    
-    DEVUELVE SOLO JSON, sin texto extra ni formato, con esta estructura:
+    4. FORMATO JSON DE SALIDA:
     {{
     "accion": "BORRADOR" | "NADA",
     "idioma": "es" | "en" | "otro",
-    "borrador": "texto del borrador o vacío si NADA",
-    "resumen_es": "resumen breve en español",
-    "plantilla_id": 0 | número de plantilla usada si aplica,
-    "categoria": "COTIZACIONES" | "ANUNCIO" | "GENERAL"
+    "borrador": "texto del borrador o vacío",
+    "resumen_es": "breve justificación de la acción tomada",
+    "plantilla_id": 0 | ID de plantilla,
+    "categoria": "GENERAL" | "ANUNCIO" | "COTIZACIONES" (Usa GENERAL por defecto, ANUNCIO para spam/marketing)
     }}
     """
-    prompt = prompt.replace(
-        "7. Asigna también una CATEGORÍA para el log con el campo \"categoria\":",
-        f"{extras_texto}\n\n7. Asigna también una CATEGORÍA para el log con el campo \"categoria\":",
-    )
-
+    
     if imagen_mime and imagen_datos:
         respuesta = modelo.generate_content(
             [
@@ -278,14 +230,7 @@ def procesar_correo_con_ia(
         categoria_val = ""
 
     borrador_texto = str(datos.get("borrador", ""))
-    if accion == "BORRADOR" and borrador_texto:
-        firma = (
-            "\n\nFerney Barbosa\n"
-            "Desarrollador de software\n"
-            "Coordinación de gestión de tecnologías y las comunicaciones\n"
-            "Sabanarlarga, Atlántico"
-        )
-        borrador_texto = f"{borrador_texto.strip()}{firma}"
+    # La firma se inyecta en gmail_client, no aquí
 
     resultado: Dict[str, str] = {
         "accion": accion,

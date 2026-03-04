@@ -42,15 +42,13 @@
 
     <div style="display:none">F-E-R-D-E-V-S-H-E-I-20-02-26</div>
     <div class="relative z-10 flex min-h-screen">
-      <aside class="hidden md:flex fixed inset-y-0 left-0 w-60 flex-shrink-0 flex-col border-r border-slate-800 bg-slate-950/90 px-4 py-6">
+      <aside class="hidden md:flex fixed inset-y-0 left-0 w-60 flex-shrink-0 flex-col border-r border-slate-800 bg-slate-950/90 px-4 py-6 z-20">
         <div class="mb-6">
           <div class="flex items-center gap-3">
             <div>
-              <div class="text-sm font-semibold tracking-wide">
+              <div class="text-sm font-semibold tracking-wide text-slate-100">
                 KYBER
-                <span class="ml-1 text-xs font-normal text-emerald-400"
-                  >v1.0</span
-                >
+                <span class="ml-1 text-xs font-normal text-emerald-400">v1.0</span>
               </div>
               <div class="text-xs text-slate-400">
                 Agente autónomo de correo con IA
@@ -65,6 +63,42 @@
           <a href="/?view=settings" class="block rounded-md px-3 py-2 {% if view == 'settings' %}bg-slate-800 text-slate-100{% else %}text-slate-300 hover:bg-slate-800/60{% endif %}">Configuración</a>
         </nav>
       </aside>
+
+      <!-- Mobile Sidebar Overlay & Menu -->
+      <div id="mobile-menu-overlay" class="fixed inset-0 z-40 hidden bg-black/50 backdrop-blur-sm transition-opacity" onclick="closeMobileMenu()"></div>
+      <aside id="mobile-sidebar" class="fixed inset-y-0 left-0 z-50 w-64 -translate-x-full transform flex-col border-r border-slate-800 bg-slate-950 px-4 py-6 transition-transform duration-300 ease-in-out md:hidden">
+        <div class="mb-6 flex items-center justify-between">
+          <div>
+            <div class="text-sm font-semibold tracking-wide text-slate-100">
+              KYBER
+              <span class="ml-1 text-xs font-normal text-emerald-400">v1.0</span>
+            </div>
+            <div class="text-xs text-slate-400">
+              Agente autónomo
+            </div>
+          </div>
+          <button type="button" class="rounded-full p-2 text-slate-400 hover:bg-slate-800 hover:text-white" onclick="closeMobileMenu()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12z"/></svg>
+          </button>
+        </div>
+        <nav class="space-y-1 text-sm">
+          <a href="/?view=dashboard" class="block rounded-md px-3 py-2 {% if view == 'dashboard' %}bg-slate-800 text-slate-100{% else %}text-slate-300 hover:bg-slate-800/60{% endif %}">Dashboard</a>
+          <a href="/?view=rules" class="block rounded-md px-3 py-2 {% if view == 'rules' %}bg-slate-800 text-slate-100{% else %}text-slate-300 hover:bg-slate-800/60{% endif %}">Reglas de IA</a>
+          <a href="/?view=respuestas" class="block rounded-md px-3 py-2 {% if view == 'respuestas' %}bg-slate-800 text-slate-100{% else %}text-slate-300 hover:bg-slate-800/60{% endif %}">Respuestas</a>
+          <a href="/?view=settings" class="block rounded-md px-3 py-2 {% if view == 'settings' %}bg-slate-800 text-slate-100{% else %}text-slate-300 hover:bg-slate-800/60{% endif %}">Configuración</a>
+        </nav>
+      </aside>
+
+      <!-- Floating Action Button (FAB) for Mobile -->
+      <button 
+        onclick="openMobileMenu()"
+        class="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/40 transition-transform hover:scale-105 active:scale-95 md:hidden"
+        aria-label="Abrir menú"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 1024 1024">
+          <path fill="#020617" d="M160 448a32 32 0 0 1-32-32V160a32 32 0 0 1 32-32h256a32 32 0 0 1 32 32v256a32 32 0 0 1-32 32zm448 0a32 32 0 0 1-32-32V160a32 32 0 0 1 32-32h256a32 32 0 0 1 32 32v256a32 32 0 0 1-32 32zM160 896a32 32 0 0 1-32-32V608a32 32 0 0 1 32-32h256a32 32 0 0 1 32 32v256a32 32 0 0 1-32 32zm448 0a32 32 0 0 1-32-32V608a32 32 0 0 1 32-32h256a32 32 0 0 1 32 32v256a32 32 0 0 1-32 32z"/>
+        </svg>
+      </button>
 
       <div class="flex min-h-screen flex-1 flex-col md:ml-60">
         <header class="border-b border-slate-800 bg-slate-950/70 backdrop-blur">
@@ -138,6 +172,25 @@
         if (!menu) return;
         menu.classList.toggle("hidden");
       }
+      
+      function openMobileMenu() {
+        const sidebar = document.getElementById("mobile-sidebar");
+        const overlay = document.getElementById("mobile-menu-overlay");
+        if (sidebar && overlay) {
+          overlay.classList.remove("hidden");
+          sidebar.classList.remove("-translate-x-full");
+        }
+      }
+
+      function closeMobileMenu() {
+        const sidebar = document.getElementById("mobile-sidebar");
+        const overlay = document.getElementById("mobile-menu-overlay");
+        if (sidebar && overlay) {
+          sidebar.classList.add("-translate-x-full");
+          overlay.classList.add("hidden");
+        }
+      }
+
       window.addEventListener("click", function (e) {
         const menu = document.getElementById("user-menu");
         if (!menu) return;

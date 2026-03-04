@@ -89,6 +89,7 @@ def _user_info(usuario):
     batch = extra_fields[3] if len(extra_fields) > 3 else 10
     max_scan = extra_fields[4] if len(extra_fields) > 4 else 100
     activo = extra_fields[5] if len(extra_fields) > 5 else 0
+    contexto_negocio = extra_fields[6] if len(extra_fields) > 6 else ""
 
     username = email.split("@")[0] if "@" in email else email
     username = username.strip() or email
@@ -103,7 +104,8 @@ def _user_info(usuario):
         "gmail_password": gmail_pwd,
         "scan_batch": batch,
         "scan_max": max_scan,
-        "agente_activo": bool(activo)
+        "agente_activo": bool(activo),
+        "contexto_negocio": contexto_negocio
     }
 
 
@@ -242,11 +244,11 @@ def _inferir_prioridad(texto: str) -> int:
 @app.post("/learn")
 def learn(
     request: Request,
+    clave: str = Form(default=""),
     instruccion: str = Form(...),
-    clave: str | None = Form(default=None),
-    prioridad: str = Form(default="auto"),
+    prioridad: str = Form(default="3"),
     tipo: str = Form(default="negocio"),
-    etiquetas: str = Form(default=""),
+    etiquetas: str | None = Form(default=None),
     regla_id: int | None = Form(default=None),
 ) -> RedirectResponse:
     usuario = _get_current_user(request)
@@ -715,6 +717,7 @@ def settings_update(
     gmail_password: str | None = Form(default=None),
     scan_batch: int = Form(default=10),
     scan_max: int = Form(default=100),
+    contexto_negocio: str | None = Form(default=None),
 ) -> RedirectResponse:
     usuario = _get_current_user(request)
     if not usuario:
@@ -728,7 +731,8 @@ def settings_update(
         gmail_user=gmail_user,
         gmail_password=gmail_password,
         scan_batch=scan_batch,
-        scan_max=scan_max
+        scan_max=scan_max,
+        contexto_negocio=contexto_negocio,
     )
     return RedirectResponse(url="/?view=settings&toast=config_actualizada", status_code=303)
 

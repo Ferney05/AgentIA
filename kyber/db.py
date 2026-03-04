@@ -39,9 +39,17 @@ def crear_base_de_datos(nombre_bd: str = "kyber.db") -> None:
             gmail_password TEXT,
             scan_batch INTEGER DEFAULT 10,
             scan_max INTEGER DEFAULT 100,
-            agente_activo INTEGER DEFAULT 0
+            agente_activo INTEGER DEFAULT 0,
+            contexto_negocio TEXT
         )
     """)
+    
+    # Migración simple para agregar contexto_negocio si no existe
+    try:
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN contexto_negocio TEXT")
+    except Exception:
+        pass # Ya existe o error ignorado
+
     print("DEBUG: [DB] Tabla usuarios verificada/creada.")
 
     # 2. Crear tabla reglas
@@ -329,7 +337,7 @@ def obtener_usuario_por_email(
     cursor = conn.cursor()
     p = _get_placeholder()
     cursor.execute(
-        f"SELECT id, email, password_hash, creado_en, gemini_api_key, gmail_user, gmail_password, scan_batch, scan_max, agente_activo FROM usuarios WHERE email = {p}",
+        f"SELECT id, email, password_hash, creado_en, gemini_api_key, gmail_user, gmail_password, scan_batch, scan_max, agente_activo, contexto_negocio FROM usuarios WHERE email = {p}",
         (email,),
     )
     fila = cursor.fetchone()
@@ -344,7 +352,7 @@ def obtener_usuario_por_id(
     cursor = conn.cursor()
     p = _get_placeholder()
     cursor.execute(
-        f"SELECT id, email, password_hash, creado_en, gemini_api_key, gmail_user, gmail_password, scan_batch, scan_max, agente_activo FROM usuarios WHERE id = {p}",
+        f"SELECT id, email, password_hash, creado_en, gemini_api_key, gmail_user, gmail_password, scan_batch, scan_max, agente_activo, contexto_negocio FROM usuarios WHERE id = {p}",
         (usuario_id,),
     )
     fila = cursor.fetchone()
@@ -356,7 +364,7 @@ def obtener_usuarios_agente_activo(nombre_bd: str = "kyber.db") -> List[Tuple[An
     conn = _get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, email, password_hash, creado_en, gemini_api_key, gmail_user, gmail_password, scan_batch, scan_max, agente_activo FROM usuarios WHERE agente_activo = 1"
+        "SELECT id, email, password_hash, creado_en, gemini_api_key, gmail_user, gmail_password, scan_batch, scan_max, agente_activo, contexto_negocio FROM usuarios WHERE agente_activo = 1"
     )
     filas = cursor.fetchall()
     conn.close()
@@ -371,6 +379,7 @@ def actualizar_configuracion_usuario(
     scan_batch: int | None = None,
     scan_max: int | None = None,
     agente_activo: int | None = None,
+    contexto_negocio: str | None = None,
     nombre_bd: str = "kyber.db",
 ) -> None:
     conn = _get_connection()
@@ -398,6 +407,9 @@ def actualizar_configuracion_usuario(
     if agente_activo is not None:
         updates.append(f"agente_activo = {p}")
         params.append(agente_activo)
+    if contexto_negocio is not None:
+        updates.append(f"contexto_negocio = {p}")
+        params.append(contexto_negocio)
         
     if not updates:
         conn.close()

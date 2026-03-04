@@ -802,6 +802,18 @@
           </div>
         </div>
 
+        <h2 class="mb-4 mt-8 text-sm font-semibold text-slate-100 border-t border-slate-800 pt-6">Personalización del Agente</h2>
+        <div class="flex flex-col gap-2">
+          <label class="text-xs font-medium text-slate-300">Contexto del negocio (rol del agente)</label>
+          <textarea 
+            name="contexto_negocio" 
+            rows="4" 
+            class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
+            placeholder="Describe aquí tu empresa y el rol del agente. Ej: Soy una empresa de venta de repuestos para maquinaria pesada llamada Mosaic Machines. Mi rol es responder cotizaciones y preguntas técnicas..."
+          >{{ user.contexto_negocio if user.contexto_negocio else '' }}</textarea>
+          <p class="text-[10px] text-slate-500">Este texto será la base de la personalidad de la IA. Define aquí qué vendes, cómo te llamas y qué haces.</p>
+        </div>
+
         <h2 class="mb-4 mt-8 text-sm font-semibold text-slate-100 border-t border-slate-800 pt-6">Preferencias de Escaneo</h2>
         <div class="grid gap-4 md:grid-cols-2">
           <div class="flex flex-col gap-2">

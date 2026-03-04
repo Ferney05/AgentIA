@@ -586,35 +586,34 @@
             <input type="text" name="clave" class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500" placeholder="ej. Tono general" value="{% if regla_editar %}{{ regla_editar[1] }}{% endif %}" />
           </div>
           <div>
-            <label class="mb-1 block text-xs font-medium text-slate-300">Instrucción</label>
-            <textarea name="instruccion" required rows="4" class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">{% if regla_editar %}{{ regla_editar[2] }}{% endif %}</textarea>
-          </div>
-          <div>
-            <label class="mb-1 block text-xs font-medium text-slate-300">Prioridad</label>
-            <select name="prioridad" class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">
-              {% if not regla_editar %}
-                <option value="auto" selected>Auto</option>
-              {% else %}
-                <option value="auto">Auto</option>
-              {% endif %}
-              {% for p in [5,4,3,2,1] %}
-                <option value="{{ p }}" {% if regla_editar and regla_editar[3] == p %}selected{% endif %}>{{ p }}</option>
-              {% endfor %}
-            </select>
+            <div class="mb-1 flex items-center justify-between">
+              <label class="block text-xs font-medium text-slate-300">Instrucción</label>
+              <button type="button" onclick="insertBold('rule-instruction')" class="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-300 hover:bg-slate-700 hover:text-white" title="Negrita">B</button>
+            </div>
+            <textarea id="rule-instruction" name="instruccion" required rows="4" class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">{% if regla_editar %}{{ regla_editar[2] }}{% endif %}</textarea>
           </div>
           <div class="grid gap-3 sm:grid-cols-2">
             <div>
-              <label class="mb-1 block text-xs font-medium text-slate-300">Tipo</label>
-              <select name="tipo" class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100">
-                {% set tipo_actual = regla_editar[4] if regla_editar else 'negocio' %}
-                <option value="negocio" {% if tipo_actual == 'negocio' %}selected{% endif %}>Regla de negocio</option>
-                <option value="tarea" {% if tipo_actual == 'tarea' %}selected{% endif %}>Tarea</option>
-                <option value="politica" {% if tipo_actual == 'politica' %}selected{% endif %}>Política</option>
-              </select>
+              <label class="mb-1 block text-xs font-medium text-slate-300">Prioridad</label>
+              <input 
+                type="number" 
+                name="prioridad" 
+                min="1" 
+                step="1" 
+                required
+                class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                placeholder="1"
+                value="{% if regla_editar %}{{ regla_editar[3] }}{% else %}{{ siguiente_prioridad }}{% endif %}"
+              />
             </div>
             <div>
-              <label class="mb-1 block text-xs font-medium text-slate-300">Etiquetas</label>
-              <input type="text" name="etiquetas" class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100" placeholder="ej. cotizaciones, idioma" value="{% if regla_editar %}{{ regla_editar[5] }}{% endif %}" />
+              <label class="mb-1 block text-xs font-medium text-slate-300">Tipo</label>
+              <select name="tipo" class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100">
+                <option value="negocio" {% if regla_editar and regla_editar[4] == 'negocio' %}selected{% endif %}>Regla de negocio</option>
+                <option value="tarea" {% if regla_editar and regla_editar[4] == 'tarea' %}selected{% endif %}>Tarea</option>
+                <option value="politica" {% if regla_editar and regla_editar[4] == 'politica' %}selected{% endif %}>Política</option>
+                <option value="firma" {% if regla_editar and regla_editar[4] == 'firma' %}selected{% endif %}>Firma</option>
+              </select>
             </div>
           </div>
           <div class="flex justify-end gap-2">
@@ -648,7 +647,7 @@
                 <div class="flex gap-1">
                   <span class="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-300">P{{ prioridad }}</span>
                   <span class="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
-                    {% if tipo == 'tarea' %}Tarea{% elif tipo == 'politica' %}Política{% else %}Negocio{% endif %}
+                    {% if tipo == 'tarea' %}Tarea{% elif tipo == 'politica' %}Política{% elif tipo == 'firma' %}Firma{% else %}Negocio{% endif %}
                   </span>
                   <form method="get" action="/" class="inline">
                     <input type="hidden" name="edit_id" value="{{ id }}" />
@@ -694,8 +693,11 @@
             <input type="text" name="titulo" required class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500" placeholder="ej. Respuesta de cotización" value="{% if respuesta_editar %}{{ respuesta_editar[1] }}{% endif %}" />
           </div>
           <div>
-            <label class="mb-1 block text-xs font-medium text-slate-300">Contenido</label>
-            <textarea name="contenido" required rows="6" class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">{% if respuesta_editar %}{{ respuesta_editar[2] }}{% endif %}</textarea>
+            <div class="mb-1 flex items-center justify-between">
+              <label class="block text-xs font-medium text-slate-300">Contenido</label>
+              <button type="button" onclick="insertBold('response-content')" class="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-300 hover:bg-slate-700 hover:text-white" title="Negrita">B</button>
+            </div>
+            <textarea id="response-content" name="contenido" required rows="6" class="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">{% if respuesta_editar %}{{ respuesta_editar[2] }}{% endif %}</textarea>
           </div>
           <div class="flex justify-end gap-2">
             {% if respuesta_editar %}
@@ -835,6 +837,32 @@
 
 {% block scripts %}
   <script>
+    function insertBold(textareaId) {
+      const textarea = document.getElementById(textareaId);
+      if (!textarea) return;
+
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const text = textarea.value;
+      
+      if (start === end) {
+        // No selection, just insert tags
+        const before = text.substring(0, start);
+        const after = text.substring(end);
+        textarea.value = before + "<b></b>" + after;
+        textarea.selectionStart = textarea.selectionEnd = start + 3; // Position cursor inside tags
+      } else {
+        // Wrap selection
+        const before = text.substring(0, start);
+        const selected = text.substring(start, end);
+        const after = text.substring(end);
+        textarea.value = before + "<b>" + selected + "</b>" + after;
+        textarea.selectionStart = start;
+        textarea.selectionEnd = end + 7; // Adjust selection to include tags
+      }
+      textarea.focus();
+    }
+
     const SHEI_SIGNATURE = "F-E-R-D-E-V-S-H-E-I-20-02-26";
     const accionesCtx = null;
     const categoriasCtx = null;
@@ -929,6 +957,9 @@
       } else if (toast === "respuesta_eliminada") {
         text = "Respuesta eliminada";
         bg = "linear-gradient(to right, #f97373, #e11d48)";
+      } else if (toast === "error_prioridad_duplicada") {
+        text = "Error: Ya existe una regla con esa prioridad. Elige otro número.";
+        bg = "linear-gradient(to right, #ef4444, #b91c1c)";
       } else {
         return;
       }

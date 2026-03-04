@@ -20,6 +20,9 @@ def _reglas_como_texto() -> str:
     items: List[tuple[int, str, str, str]] = []
     for _, clave, instruccion, prioridad, tipo, etiquetas, es_principal in reglas:
         tipo_norm = (tipo or "negocio").lower()
+        # Excluir 'firma' del prompt, ya que se agrega programáticamente
+        if tipo_norm == "firma":
+            continue
         if tipo_norm != "negocio":
             continue
         try:
@@ -31,8 +34,8 @@ def _reglas_como_texto() -> str:
             linea = f"{linea} (Etiquetas: {(etiquetas or '').strip()})"
         etiqueta_orden = (etiquetas or "").strip().lower()
         items.append((prio_val, etiqueta_orden, str(clave), linea))
-    # Orden: prioridad desc, luego etiqueta asc, luego clave asc
-    items.sort(key=lambda x: (-x[0], x[1], x[2]))
+    # Orden: prioridad ASC (1, 2, 3...), luego etiqueta asc, luego clave asc
+    items.sort(key=lambda x: (x[0], x[1], x[2]))
     partes = [linea for _, _, _, linea in items]
     texto = "\n\n".join(partes)
     return texto if texto else "Sin reglas adicionales; usa buen criterio profesional."
@@ -173,36 +176,50 @@ def procesar_correo_con_ia(
        - "cotizacion_completa": el cliente quiere cotización y entrega el serial o un número de pieza válido.
        - "pregunta_general": dudas post-cotización o consultas generales.
        - "anuncio": correos de marketing, publicidad, newsletters.
-    4. Antes de redactar nada, revisa si alguna PLANTILLA se ajusta claramente a la petición del cliente.
-    - Analiza tanto el TITULO como el TEXTO_COMPLETO de cada plantilla y compáralos con el asunto, el cuerpo y el historial del hilo. Elige solo la plantilla cuya intención coincida claramente con la pregunta del cliente. Si no hay coincidencia clara o tienes duda, no uses ninguna plantilla y deja "plantilla_id" = 0.
-    - Si el correo es una cotización INCOMPLETA y el cliente NO envió ni serial ni número de pieza (puede que tampoco envíe modelo, incluso si la información solo aparece en una imagen adjunta):
-        - Si existe una plantilla cuyo propósito sea pedir datos mínimos para cotizar (por ejemplo, “Favor enviar el modelo y serial de la máquina para cotizar…”), úsala tal cual:
-        - "accion" = "BORRADOR".
-        - "plantilla_id" = ID de esa plantilla.
-        - Copia el TEXTO_COMPLETO de esa plantilla directamente en "borrador", sin cambiar ni añadir nada.
-    - Si el correo es una cotización INCOMPLETA (falta serial o número de pieza):
-         - PRIMERO: Busca si hay una PLANTILLA configurada para pedir datos o seriales. Si la hay, ÚSALA ("plantilla_id" = ID de esa plantilla).
-         - SEGUNDO: Solo si NO hay plantilla adecuada, redacta tú el borrador directo: "Hola, para cotizar [PIEZA] de [MODELO], necesito el NÚMERO DE SERIE...".
-    - Si el cliente envía serial (aunque falte modelo), trátalo como "cotizacion_completa".
-    - Para otras situaciones donde una PLANTILLA coincida exactamente con la pregunta (por ejemplo, explicar original vs reemplazo):
-        - "accion" = "BORRADOR".
-        - "plantilla_id" = ID numérico de esa plantilla.
-        - Copia el TEXTO_COMPLETO de esa plantilla en "borrador", sin modificar nada.
-    - No expliques quién es la empresa ni añadas textos comerciales o de presentación.
-    5. Lógica según tipo de correo (respetando SIEMPRE las reglas de negocio; si alguna regla indica no crear borrador para cierto caso, obedece esa regla y no crees borrador aunque el correo parezca importante):
-    - Si "cotizacion_completa": "accion" = "NADA" y "borrador" vacío. El usuario enviará la cotización en su propio formato.
+    4. TAREA PRINCIPAL: ANÁLISIS EXHAUSTIVO Y SELECCIÓN DE PLANTILLAS.
+    - ANÁLISIS PROFUNDO: Antes de decidir, LEE Y ANALIZA CUIDADOSAMENTE:
+        * El ASUNTO (puede contener la clave, ej: "Pago", "Cotización").
+        * El CUERPO COMPLETO (busca la intención real detrás del texto).
+        * Los ADJUNTOS (si hay imagen, ¿qué muestra? ¿Un repuesto? ¿Una factura?).
+    - COMPARACIÓN OBLIGATORIA: Debes "leer" mentalmente TODAS las plantillas disponibles en la lista de arriba.
+    - COINCIDENCIA DE INTENCIÓN: No busques solo palabras exactas. Busca el SIGNIFICADO.
+        * Ejemplo: Si el cliente dice "¿A dónde transfiero?", busca plantillas sobre "Métodos de Pago" o "Cuentas Bancarias", aunque no digan la palabra "transfiero".
+    - REGLA DE ORO: SI EXISTE UNA PLANTILLA QUE CUBRA LA INTENCIÓN, ÚSALA.
+    
+    - CÓMO USAR LA PLANTILLA:
+        1. Toma el "TEXTO_COMPLETO" de la plantilla seleccionada.
+        2. MANEJO DE VARIABLES FALTANTES (CRÍTICO):
+           - Si la plantilla pide un dato que NO tienes (ej: {{LINK_PAGO}}, [NUM_FACTURA], [PRECIO]):
+           - ¡GENERA EL BORRADOR IGUAL! NO LO DESCARTES.
+           - Deja el marcador explícito en el texto (ej: "[INSERTAR_LINK_AQUI]" o mantén el original {{...}}) para que el usuario humano lo rellene después.
+           - El usuario sabe que debe poner esos datos manualmente. TU TRABAJO ES PREPARAR EL ESQUELETO DEL CORREO.
+        3. Si tienes el dato en el correo del cliente (ej: menciona el modelo), rellénalo.
+        4. NO CAMBIES el tono ni la estructura base de la plantilla.
+    - EJEMPLO: Si la plantilla dice "Pague aquí: {{LINK}}", y no tienes el link, genera el borrador diciendo "Pague aquí: [INSERTAR_LINK]". NO respondas "NADA".
+    
+    5. Lógica de decisión (respetando SIEMPRE las reglas de negocio):
+    - Si "cotizacion_completa": "accion" = "NADA" (el humano cotiza).
     - Si "cotizacion_incompleta":
-        - Si no hay plantilla adecuada o no es claro qué falta, "accion" = "NADA" y "borrador" vacío.
-        - Si hay plantilla clara o puedes redactar un mensaje corto y preciso pidiendo exactamente el dato que falta (normalmente el serial), "accion" = "BORRADOR" y "borrador" contiene solo ese pedido de información adicional.
-    - Si "anuncio": SIEMPRE pon "accion" = "NADA" y "borrador" vacío. Ignora cualquier petición de compra que parezca ser parte de una campaña publicitaria masiva.
-    - Si "pregunta_general": responde normalmente siguiendo reglas y plantillas, pero mantén siempre el borrador CORTO (máximo 2–3 frases), directo y sin texto innecesario.
-    6. Si ninguna plantilla coincide claramente:
-    - Si es un anuncio, spam suave o comunicación no accionable: "accion" = "NADA" y "borrador" vacío.
-    - Si requiere respuesta o seguimiento: "accion" = "BORRADOR" y redacta un borrador MUY BREVE (máximo 1–2 frases), directo y sin presentaciones. No menciones la empresa ni escribas textos comerciales.
+        - BUSCA plantilla de "Faltan datos" o "Solicitud de serial".
+        - Si la encuentras: "accion" = "BORRADOR", "plantilla_id" = ID, "borrador" = plantilla adaptada.
+        - Si NO encuentras plantilla adecuada: "accion" = "NADA" (No inventes nada).
+    - Si "anuncio": "accion" = "NADA".
+    - Si "pregunta_general":
+        - REVISA TODAS LAS PLANTILLAS GENERALES (Pagos, Ubicación, Horarios, etc.).
+        - Si alguna coincide con la duda del cliente: "accion" = "BORRADOR", "plantilla_id" = ID, "borrador" = plantilla adaptada.
+        - Si NO existe ninguna plantilla relacionada: "accion" = "NADA".
+
+    6. PROHIBIDO REDACTAR DESDE CERO.
+    - Si ninguna plantilla encaja con la solicitud del cliente:
+        - "accion" = "NADA".
+        - "resumen_es": DEBES explicar por qué no se actuó. Ejemplo: "No se encontró plantilla adecuada para solicitud de [INTENCIÓN DETECTADA]. Se requiere revisión manual."
+    - Prefiere no responder a inventar una respuesta que no esté homologada en las plantillas.
+
     7. Asigna también una CATEGORÍA para el log con el campo "categoria":
-    - Usa "COTIZACIONES" para cualquier solicitud de precios, cotizaciones o presupuestos (completas o incompletas).
-    - Usa "ANUNCIO" para campañas, promociones, newsletters, avisos de temporada, etc.
-    - Usa "GENERAL" para el resto de correos.
+    - "COTIZACIONES": ÚSALO SOLO si el cliente pide explícitamente PRECIO, DISPONIBILIDAD o PRESUPUESTO.
+      * IMPORTANTE: Preguntas breves como "¿Cómo pago?", "¿Dónde están ubicados?", "¿Tienen cuenta bancaria?" SON "GENERAL", NO SON COTIZACIONES. No clasifiques como cotización si no hay intención de compra de repuestos/maquinaria.
+    - "ANUNCIO": Para campañas, promociones, newsletters. (Esta categoría sirve para que el sistema ignore el correo automáticamente).
+    - "GENERAL": Para todo lo demás (preguntas administrativas, pagos, dudas breves, saludos sin solicitud de precio).
     8. Si el correo está en inglés:
     - Redacta el borrador de respuesta en inglés.
     - Genera un resumen en español del correo recibido.
@@ -260,10 +277,20 @@ def procesar_correo_con_ia(
     if categoria_val not in {"COTIZACIONES", "ANUNCIO", "GENERAL"}:
         categoria_val = ""
 
+    borrador_texto = str(datos.get("borrador", ""))
+    if accion == "BORRADOR" and borrador_texto:
+        firma = (
+            "\n\nFerney Barbosa\n"
+            "Desarrollador de software\n"
+            "Coordinación de gestión de tecnologías y las comunicaciones\n"
+            "Sabanarlarga, Atlántico"
+        )
+        borrador_texto = f"{borrador_texto.strip()}{firma}"
+
     resultado: Dict[str, str] = {
         "accion": accion,
         "idioma": str(datos.get("idioma", "desconocido")),
-        "borrador": str(datos.get("borrador", "")),
+        "borrador": borrador_texto,
         "resumen_es": str(datos.get("resumen_es", "")),
         "plantilla_id": plantilla_id_val,
         "categoria": categoria_val,

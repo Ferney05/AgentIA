@@ -268,13 +268,30 @@ def crear_borrador(
     references: str | None = None,
     usuario: str | None = None,
     clave_app: str | None = None,
+    firma_personalizada: str | None = None,
 ) -> None:
     user = usuario or os.environ.get("KYBER_GMAIL_USER")
     pwd = clave_app or os.environ.get("KYBER_GMAIL_APP_PASSWORD")
     if not user or not pwd:
         return
         
-    mensaje = MIMEText(cuerpo, _charset="utf-8")
+    firma = firma_personalizada 
+    
+    # or (
+    #     "\n\nFerney Barbosa\n"
+    #     "Desarrollador de software\n"
+    #     "Coordinación de gestión de tecnologías y las comunicaciones\n"
+    #     "Sabanarlarga, Atlántico"
+    # )
+    
+    if firma and firma.strip() not in cuerpo:
+        firma_html = firma.replace("\n", "<br>")
+        cuerpo = f"{cuerpo}<br>{firma_html}"
+
+    # Convertir saltos de línea del cuerpo a HTML
+    cuerpo_html = cuerpo.replace("\n", "<br>")
+
+    mensaje = MIMEText(cuerpo_html, "html", _charset="utf-8")
     mensaje["From"] = user
     mensaje["To"] = responder_a
     mensaje["Subject"] = asunto

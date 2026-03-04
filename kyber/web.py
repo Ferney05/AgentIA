@@ -36,6 +36,8 @@ from .db import (
     obtener_usuario_por_id,
     obtener_logs_filtrados_paginados,
     eliminar_logs,
+    obtener_firma_usuario,
+    obtener_siguiente_prioridad,
 )
 from .gmail_client import (
     crear_borrador,
@@ -172,6 +174,9 @@ def dashboard(
     from .db import obtener_borradores_por_periodo
     borradores_periodo = obtener_borradores_por_periodo(periodo=per, usuario_id=user_info["id"])
     respuesta_editar = obtener_respuesta_por_id(edit_respuesta_id) if edit_respuesta_id is not None else None
+    
+    siguiente_prioridad = obtener_siguiente_prioridad(user_info["id"])
+    
     total_pages = (total_logs // page_size) + (1 if total_logs % page_size else 0)
     has_prev = page_val > 1
     has_next = page_val < total_pages
@@ -183,6 +188,7 @@ def dashboard(
         "logs": logs,
         "toast": toast,
         "regla_editar": regla_editar,
+        "siguiente_prioridad": siguiente_prioridad,
         "respuestas": respuestas,
         "respuesta_editar": respuesta_editar,
         "view": view,
@@ -279,7 +285,7 @@ def learn(
             prioridad_int = prioridad_sugerida_por_ia
 
     tipo_norm = (tipo or "negocio").strip().lower()
-    if tipo_norm not in {"negocio", "tarea", "politica"}:
+    if tipo_norm not in {"negocio", "tarea", "politica", "firma"}:
         tipo_norm = "negocio"
     etiquetas_txt = (etiquetas or "").strip()
     if not etiquetas_txt:
@@ -300,6 +306,12 @@ def learn(
             else:
                 etiquetas_txt = "general"
     etiquetas_txt = _normalizar_token(etiquetas_txt, default="General")
+
+    # Validar unicidad de prioridad para este usuario
+    from .db import existe_prioridad
+    if existe_prioridad(user_info["id"], prioridad_int, exclude_id=regla_id):
+        return RedirectResponse(url="/?view=rules&toast=error_prioridad_duplicada", status_code=303)
+
     if regla_id is not None:
         actualizar_regla(regla_id, clave_final, instruccion, prioridad=prioridad_int, tipo=tipo_norm, etiquetas=etiquetas_txt, es_principal=0)
         destino = "/?view=rules&toast=regla_editada"
@@ -407,6 +419,13 @@ def _ejecutar_scan(user_info: dict) -> int:
     gmail_user = user_info.get("gmail_user")
     gmail_pwd = user_info.get("gmail_password")
 
+    # Obtener firma personalizada si existe
+    firma_usuario = obtener_firma_usuario(user_info["id"])
+    if firma_usuario:
+        # Asegurarse de que empiece con saltos de línea si no los tiene
+        if not firma_usuario.startswith("\n"):
+            firma_usuario = f"\n\n{firma_usuario.strip()}"
+
     if not api_key or not gmail_user or not gmail_pwd:
         print(f"DEBUG: Faltan credenciales. API Key: {bool(api_key)}, User: {bool(gmail_user)}, Pwd: {bool(gmail_pwd)}")
         return 0
@@ -437,29 +456,11 @@ def _ejecutar_scan(user_info: dict) -> int:
             thr = correo.get("thread_id")
             mensaje_id = correo.get("message_id") or ""
             if thr and existe_borrador_para_thread_id(thr, usuario=gmail_user, clave_app=gmail_pwd):
-                insertar_log(
-                    fecha=ahora,
-                    remitente=correo["remitente"],
-                    asunto=correo["asunto"],
-                    resumen=f"Hilo omitido por borrador previo (thread_id={thr})",
-                    accion="OMITIDO_BORRADOR_THREAD",
-                    idioma="desconocido",
-                    categoria="GENERAL",
-                    usuario_id=user_info["id"]
-                )
+                # Omitir silenciosamente sin guardar log
                 ids_para_no_leer.append(correo["id"])
                 continue
             if mensaje_id and existe_borrador_para_message_id(mensaje_id, usuario=gmail_user, clave_app=gmail_pwd):
-                insertar_log(
-                    fecha=ahora,
-                    remitente=correo["remitente"],
-                    asunto=correo["asunto"],
-                    resumen=f"Mensaje omitido por borrador previo (Message-ID={mensaje_id})",
-                    accion="OMITIDO_BORRADOR_MSG",
-                    idioma="desconocido",
-                    categoria="GENERAL",
-                    usuario_id=user_info["id"]
-                )
+                # Omitir silenciosamente sin guardar log
                 ids_para_no_leer.append(correo["id"])
                 continue
             ultimo_de_mi_usuario = False
@@ -582,29 +583,13 @@ def _ejecutar_scan(user_info: dict) -> int:
 
             if resultado["accion"] == "BORRADOR":
                 if thr and existe_borrador_para_thread_id(thr, usuario=gmail_user, clave_app=gmail_pwd):
-                    insertar_log(
-                        fecha=ahora,
-                        remitente=correo["remitente"],
-                        asunto=correo["asunto"],
-                        resumen=f"Hilo con borrador previo detectado al crear borrador (thread_id={thr})",
-                        accion="OMITIDO_BORRADOR_THREAD",
-                        idioma=resultado.get("idioma", "desconocido"),
-                        categoria=categoria or "GENERAL",
-                        usuario_id=user_info["id"]
-                    )
+                    # Omitir silenciosamente sin guardar log
                     resultado["accion"] = "NADA"
+                    continue # Saltar log
                 elif existe_borrador_para_message_id(correo.get("message_id") or "", usuario=gmail_user, clave_app=gmail_pwd):
-                    insertar_log(
-                        fecha=ahora,
-                        remitente=correo["remitente"],
-                        asunto=correo["asunto"],
-                        resumen=f"Mensaje con borrador previo detectado al crear borrador (Message-ID={correo.get('message_id') or ''})",
-                        accion="OMITIDO_BORRADOR_MSG",
-                        idioma=resultado.get("idioma", "desconocido"),
-                        categoria=categoria or "GENERAL",
-                        usuario_id=user_info["id"]
-                    )
+                    # Omitir silenciosamente sin guardar log
                     resultado["accion"] = "NADA"
+                    continue # Saltar log
                 else:
                     def _sanear_borrador(texto: str) -> str:
                         t = (texto or "").strip()
@@ -635,7 +620,8 @@ def _ejecutar_scan(user_info: dict) -> int:
                         in_reply_to=correo.get("message_id"),
                         references=correo.get("message_id"),
                         usuario=gmail_user,
-                        clave_app=gmail_pwd
+                        clave_app=gmail_pwd,
+                        firma_personalizada=firma_usuario
                     )
                     if not es_cotizacion:
                         ids_para_marcar.append(correo["id"])

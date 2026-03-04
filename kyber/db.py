@@ -110,6 +110,50 @@ def insertar_regla(
     conn.close()
 
 
+def obtener_firma_usuario(usuario_id: int) -> str | None:
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+    cursor.execute(
+        f"SELECT instruccion FROM reglas WHERE usuario_id = {p} AND tipo = 'firma' LIMIT 1",
+        (usuario_id,),
+    )
+    fila = cursor.fetchone()
+    conn.close()
+    return fila[0] if fila else None
+
+def existe_prioridad(usuario_id: int, prioridad: int, exclude_id: int | None = None) -> bool:
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+    if exclude_id is not None:
+        cursor.execute(
+            f"SELECT 1 FROM reglas WHERE usuario_id = {p} AND prioridad = {p} AND id != {p} LIMIT 1",
+            (usuario_id, prioridad, exclude_id),
+        )
+    else:
+        cursor.execute(
+            f"SELECT 1 FROM reglas WHERE usuario_id = {p} AND prioridad = {p} LIMIT 1",
+            (usuario_id, prioridad),
+        )
+    exists = cursor.fetchone() is not None
+    conn.close()
+    return exists
+
+def obtener_siguiente_prioridad(usuario_id: int) -> int:
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+    cursor.execute(
+        f"SELECT MAX(prioridad) FROM reglas WHERE usuario_id = {p}",
+        (usuario_id,),
+    )
+    fila = cursor.fetchone()
+    conn.close()
+    if fila and fila[0] is not None:
+        return int(fila[0]) + 1
+    return 1
+
 def obtener_reglas(usuario_id: int | None = None, nombre_bd: str = "kyber.db") -> List[Tuple[Any, ...]]:
     conn = _get_connection()
     cursor = conn.cursor()

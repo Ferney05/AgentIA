@@ -5,6 +5,7 @@ import re
 
 from fastapi import FastAPI, Form, Request, Query, Path
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -38,9 +39,11 @@ from .db import (
     eliminar_logs,
     obtener_firma_usuario,
     obtener_siguiente_prioridad,
+    obtener_regla_por_id,
 )
 from .gmail_client import (
     crear_borrador,
+    enviar_correo,
     obtener_ids_no_leidos,
     obtener_correos_por_ids,
     marcar_como_leido,
@@ -52,6 +55,7 @@ from .gmail_client import (
 
 
 app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.environ.get("KYBER_SESSION_SECRET", "kyber-dev-session-secret"),
@@ -250,6 +254,7 @@ def learn(
     tipo: str = Form(default="negocio"),
     etiquetas: str | None = Form(default=None),
     regla_id: int | None = Form(default=None),
+    auto_enviar: int = Form(default=0),
 ) -> RedirectResponse:
     usuario = _get_current_user(request)
     if not usuario:
@@ -315,11 +320,29 @@ def learn(
         return RedirectResponse(url="/?view=rules&toast=error_prioridad_duplicada", status_code=303)
 
     if regla_id is not None:
-        actualizar_regla(regla_id, clave_final, instruccion, prioridad=prioridad_int, tipo=tipo_norm, etiquetas=etiquetas_txt, es_principal=0)
-        destino = "/?view=rules&toast=regla_editada"
+        actualizar_regla(
+            regla_id, 
+            clave_final, 
+            instruccion, 
+            prioridad=prioridad_int, 
+            tipo=tipo_norm, 
+            etiquetas=etiquetas_txt, 
+            es_principal=0,
+            auto_enviar=auto_enviar
+        )
+        destino = f"/?view=rules&toast=regla_editada"
     else:
-        insertar_regla(clave_final, instruccion, usuario_id=user_info["id"], prioridad=prioridad_int, tipo=tipo_norm, etiquetas=etiquetas_txt, es_principal=0)
-        destino = "/?view=rules&toast=regla_creada"
+        insertar_regla(
+            clave_final, 
+            instruccion, 
+            usuario_id=user_info["id"], 
+            prioridad=prioridad_int, 
+            tipo=tipo_norm, 
+            etiquetas=etiquetas_txt, 
+            es_principal=0,
+            auto_enviar=auto_enviar
+        )
+        destino = f"/?view=rules&toast=regla_creada"
 
     return RedirectResponse(url=destino, status_code=303)
 
@@ -420,6 +443,7 @@ def _ejecutar_scan(user_info: dict) -> int:
     api_key = user_info.get("gemini_api_key")
     gmail_user = user_info.get("gmail_user")
     gmail_pwd = user_info.get("gmail_password")
+    contexto_negocio = user_info.get("contexto_negocio", "")
 
     # Obtener firma personalizada si existe
     firma_usuario = obtener_firma_usuario(user_info["id"])
@@ -493,7 +517,8 @@ def _ejecutar_scan(user_info: dict) -> int:
                     imagen_mime=correo.get("imagen_mime"),
                     imagen_datos=correo.get("imagen_datos"),
                     historial_texto=historial_texto,
-                    api_key=api_key
+                    api_key=api_key,
+                    contexto_negocio=contexto_negocio
                 )
             except Exception as e:
                 error_str = str(e).lower()
@@ -615,17 +640,36 @@ def _ejecutar_scan(user_info: dict) -> int:
                             resultado["borrador"] = plantilla[2]
                     else:
                         resultado["borrador"] = _sanear_borrador(resultado["borrador"])
-                    crear_borrador(
-                        responder_a=correo.get("from_email") or correo["remitente"],
-                        asunto=f"Re: {correo['asunto']}",
-                        cuerpo=resultado["borrador"],
-                        in_reply_to=correo.get("message_id"),
-                        references=correo.get("message_id"),
-                        usuario=gmail_user,
-                        clave_app=gmail_pwd,
-                        firma_personalizada=firma_usuario
-                    )
-                    if not es_cotizacion:
+                    
+                    # Lógica de Auto-Envío
+                    enviado_auto = False
+                    if resultado.get("auto_enviar") is True:
+                        enviado_auto = enviar_correo(
+                            destinatario=correo.get("from_email") or correo["remitente"],
+                            asunto=f"Re: {correo['asunto']}",
+                            cuerpo=resultado["borrador"],
+                            in_reply_to=correo.get("message_id"),
+                            references=correo.get("message_id"),
+                            usuario=gmail_user,
+                            clave_app=gmail_pwd,
+                            firma_personalizada=firma_usuario
+                        )
+                        if enviado_auto:
+                            resultado["accion"] = "ENVIADO_AUTO"
+                    
+                    if not enviado_auto:
+                        crear_borrador(
+                            responder_a=correo.get("from_email") or correo["remitente"],
+                            asunto=f"Re: {correo['asunto']}",
+                            cuerpo=resultado["borrador"],
+                            in_reply_to=correo.get("message_id"),
+                            references=correo.get("message_id"),
+                            usuario=gmail_user,
+                            clave_app=gmail_pwd,
+                            firma_personalizada=firma_usuario
+                        )
+                    
+                    if not es_cotizacion or enviado_auto:
                         ids_para_marcar.append(correo["id"])
 
             insertar_log(

@@ -312,6 +312,49 @@ def crear_borrador(
 
     conexion.logout()
 
+
+def enviar_correo(
+    destinatario: str,
+    asunto: str,
+    cuerpo: str,
+    in_reply_to: str | None = None,
+    references: str | None = None,
+    usuario: str | None = None,
+    clave_app: str | None = None,
+    firma_personalizada: str | None = None,
+) -> bool:
+    """Envía un correo electrónico inmediatamente usando SMTP."""
+    user = usuario or os.environ.get("KYBER_GMAIL_USER")
+    pwd = clave_app or os.environ.get("KYBER_GMAIL_APP_PASSWORD")
+    if not user or not pwd:
+        return False
+        
+    firma = firma_personalizada 
+    if firma and firma.strip() not in cuerpo:
+        firma_html = firma.replace("\n", "<br>")
+        cuerpo = f"{cuerpo}<br><br>{firma_html}"
+
+    cuerpo_html = cuerpo.replace("\n", "<br>")
+
+    mensaje = MIMEText(cuerpo_html, "html", _charset="utf-8")
+    mensaje["From"] = user
+    mensaje["To"] = destinatario
+    mensaje["Subject"] = asunto
+    if in_reply_to:
+        mensaje["In-Reply-To"] = in_reply_to
+    if references:
+        mensaje["References"] = references
+
+    try:
+        import smtplib
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(user, pwd)
+            server.send_message(mensaje)
+        return True
+    except Exception as e:
+        print(f"ERROR AL ENVIAR CORREO: {e}")
+        return False
+
 def existe_borrador_para_message_id(message_id: str, usuario: str | None = None, clave_app: str | None = None) -> bool:
     if not message_id:
         return False

@@ -1,6 +1,6 @@
 import os
 import re
-from typing import Dict, List
+from typing import Dict, List, Any
 
 import google.generativeai as genai
 
@@ -18,7 +18,7 @@ def _configurar_modelo(api_key: str | None = None) -> genai.GenerativeModel:
 def _reglas_como_texto() -> str:
     reglas = obtener_reglas()
     items: List[tuple[int, str, str, str]] = []
-    for _, clave, instruccion, prioridad, tipo, etiquetas, es_principal in reglas:
+    for _, clave, instruccion, prioridad, tipo, etiquetas, es_principal, auto_enviar in reglas:
         tipo_norm = (tipo or "negocio").lower()
         # Solo incluir reglas de tipo 'negocio' aquí
         if tipo_norm != "negocio":
@@ -27,7 +27,11 @@ def _reglas_como_texto() -> str:
             prio_val = int(prioridad)
         except Exception:
             prio_val = 3
+        
         linea = f"[PRIORIDAD {prio_val}] {clave}: {instruccion}"
+        if auto_enviar:
+            linea += " (AUTO-ENVÍO ACTIVO: Si aplica esta regla, marca auto_enviar=true)"
+            
         items.append((prio_val, str(clave), linea))
     # Orden: prioridad ASC (1, 2, 3...)
     items.sort(key=lambda x: (x[0], x[1]))
@@ -195,7 +199,8 @@ def procesar_correo_con_ia(
     "borrador": "texto del borrador o vacío",
     "resumen_es": "breve justificación de la acción tomada",
     "plantilla_id": 0 | ID de plantilla,
-    "categoria": "GENERAL" | "ANUNCIO" | "COTIZACIONES" (Usa GENERAL por defecto, ANUNCIO para spam/marketing)
+    "categoria": "GENERAL" | "ANUNCIO" | "COTIZACIONES",
+    "auto_enviar": true | false (Solo si la regla aplicada tiene AUTO-ENVÍO ACTIVO)
     }}
     """
     
@@ -230,15 +235,16 @@ def procesar_correo_con_ia(
         categoria_val = ""
 
     borrador_texto = str(datos.get("borrador", ""))
-    # La firma se inyecta en gmail_client, no aquí
+    auto_enviar_val = bool(datos.get("auto_enviar", False))
 
-    resultado: Dict[str, str] = {
+    resultado: Dict[str, Any] = {
         "accion": accion,
         "idioma": str(datos.get("idioma", "desconocido")),
         "borrador": borrador_texto,
         "resumen_es": str(datos.get("resumen_es", "")),
         "plantilla_id": plantilla_id_val,
         "categoria": categoria_val,
+        "auto_enviar": auto_enviar_val,
     }
     return resultado
 

@@ -62,9 +62,17 @@ def crear_base_de_datos(nombre_bd: str = "kyber.db") -> None:
             prioridad INTEGER DEFAULT 3,
             tipo TEXT DEFAULT 'negocio',
             etiquetas TEXT DEFAULT '',
-            es_principal INTEGER DEFAULT 0
+            es_principal INTEGER DEFAULT 0,
+            auto_enviar INTEGER DEFAULT 0
         )
     """)
+    
+    # Migración: Agregar columna auto_enviar a reglas si no existe
+    try:
+        cursor.execute("ALTER TABLE reglas ADD COLUMN auto_enviar INTEGER DEFAULT 0")
+    except Exception:
+        pass
+
     print("DEBUG: [DB] Tabla reglas verificada/creada.")
 
     # 3. Crear tabla logs
@@ -105,14 +113,15 @@ def insertar_regla(
     tipo: str = "negocio",
     etiquetas: str = "",
     es_principal: int = 0,
+    auto_enviar: int = 0,
     nombre_bd: str = "kyber.db",
 ) -> None:
     conn = _get_connection()
     cursor = conn.cursor()
     p = _get_placeholder()
     cursor.execute(
-        f"INSERT INTO reglas (clave, instruccion, usuario_id, prioridad, tipo, etiquetas, es_principal) VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p})",
-        (clave, instruccion, usuario_id, prioridad, tipo, etiquetas, es_principal),
+        f"INSERT INTO reglas (clave, instruccion, usuario_id, prioridad, tipo, etiquetas, es_principal, auto_enviar) VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})",
+        (clave, instruccion, usuario_id, prioridad, tipo, etiquetas, es_principal, auto_enviar),
     )
     conn.commit()
     conn.close()
@@ -167,10 +176,10 @@ def obtener_reglas(usuario_id: int | None = None, nombre_bd: str = "kyber.db") -
     cursor = conn.cursor()
     p = _get_placeholder()
     if usuario_id is None:
-        cursor.execute("SELECT id, clave, instruccion, COALESCE(prioridad, 3), COALESCE(tipo, 'negocio'), COALESCE(etiquetas, ''), COALESCE(es_principal, 0) FROM reglas ORDER BY COALESCE(prioridad, 3) DESC, id DESC")
+        cursor.execute("SELECT id, clave, instruccion, COALESCE(prioridad, 3), COALESCE(tipo, 'negocio'), COALESCE(etiquetas, ''), COALESCE(es_principal, 0), COALESCE(auto_enviar, 0) FROM reglas ORDER BY COALESCE(prioridad, 3) DESC, id DESC")
     else:
         cursor.execute(
-            f"SELECT id, clave, instruccion, COALESCE(prioridad, 3), COALESCE(tipo, 'negocio'), COALESCE(etiquetas, ''), COALESCE(es_principal, 0) FROM reglas WHERE usuario_id = {p} OR usuario_id IS NULL ORDER BY COALESCE(prioridad, 3) DESC, id DESC",
+            f"SELECT id, clave, instruccion, COALESCE(prioridad, 3), COALESCE(tipo, 'negocio'), COALESCE(etiquetas, ''), COALESCE(es_principal, 0), COALESCE(auto_enviar, 0) FROM reglas WHERE usuario_id = {p} OR usuario_id IS NULL ORDER BY COALESCE(prioridad, 3) DESC, id DESC",
             (usuario_id,),
         )
     filas = cursor.fetchall()
@@ -183,7 +192,7 @@ def obtener_regla_por_id(regla_id: int, nombre_bd: str = "kyber.db") -> Tuple[An
     cursor = conn.cursor()
     p = _get_placeholder()
     cursor.execute(
-        f"SELECT id, clave, instruccion, COALESCE(prioridad, 3), COALESCE(tipo, 'negocio'), COALESCE(etiquetas, ''), COALESCE(es_principal, 0) FROM reglas WHERE id = {p}",
+        f"SELECT id, clave, instruccion, COALESCE(prioridad, 3), COALESCE(tipo, 'negocio'), COALESCE(etiquetas, ''), COALESCE(es_principal, 0), COALESCE(auto_enviar, 0) FROM reglas WHERE id = {p}",
         (regla_id,),
     )
     fila = cursor.fetchone()
@@ -199,14 +208,15 @@ def actualizar_regla(
     tipo: str = "negocio",
     etiquetas: str = "",
     es_principal: int = 0,
+    auto_enviar: int = 0,
     nombre_bd: str = "kyber.db",
 ) -> None:
     conn = _get_connection()
     cursor = conn.cursor()
     p = _get_placeholder()
     cursor.execute(
-        f"UPDATE reglas SET clave = {p}, instruccion = {p}, prioridad = {p}, tipo = {p}, etiquetas = {p}, es_principal = {p} WHERE id = {p}",
-        (clave, instruccion, prioridad, tipo, etiquetas, es_principal, regla_id),
+        f"UPDATE reglas SET clave = {p}, instruccion = {p}, prioridad = {p}, tipo = {p}, etiquetas = {p}, es_principal = {p}, auto_enviar = {p} WHERE id = {p}",
+        (clave, instruccion, prioridad, tipo, etiquetas, es_principal, auto_enviar, regla_id),
     )
     conn.commit()
     conn.close()

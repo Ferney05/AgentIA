@@ -523,9 +523,11 @@
                 </td>
                 <td class="px-3 py-2">
                   <span
-                    class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold
+                    class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold
                     {% if accion == 'BORRADOR' %}
                       bg-emerald-500/15 text-emerald-300
+                    {% elif accion == 'ENVIADO_AUTO' %}
+                      bg-violet-500/20 text-violet-300 border border-violet-500/30
                     {% elif accion and accion.startswith('OMITIDO_') %}
                       bg-amber-500/15 text-amber-300
                     {% else %}
@@ -534,6 +536,8 @@
                   >
                     {% if accion == 'BORRADOR' %}
                       Borrador
+                    {% elif accion == 'ENVIADO_AUTO' %}
+                      ⚡ Enviado
                     {% elif accion == 'OMITIDO_BORRADOR_THREAD' %}
                       Omitido (borrador en hilo)
                     {% elif accion == 'OMITIDO_BORRADOR_MSG' %}

@@ -199,9 +199,17 @@ def procesar_correo_con_ia(
     "borrador": "texto del borrador o vacío",
     "resumen_es": "breve justificación de la acción tomada",
     "plantilla_id": 0 | ID de plantilla,
-    "categoria": "GENERAL" | "ANUNCIO" | "COTIZACIONES",
+    "categoria": "UNA PALABRA que mejor describa el tipo/tema del correo según tu análisis",
     "auto_enviar": true | false (Solo si la regla aplicada tiene AUTO-ENVÍO ACTIVO)
     }}
+    
+    IMPORTANTE SOBRE CATEGORÍAS:
+    - Inventa UNA SOLA PALABRA en MAYÚSCULAS que describa el tema principal del correo
+    - Sé creativo y específico según el contenido real que analizaste
+    - La palabra debe ser descriptiva del tema/propósito del correo
+    - Si es spam/marketing/newsletter: usa "ANUNCIO"
+    - Solo usa "GENERAL" si realmente no puedes identificar un tema específico
+    - Ejemplos de categorías que podrías crear: PRECIO, DISPONIBILIDAD, GARANTIA, ENVIO, DEVOLUCION, INSTALACION, CAPACITACION, MANTENIMIENTO, URGENTE, etc.
     """
     
     if imagen_mime and imagen_datos:
@@ -230,9 +238,16 @@ def procesar_correo_con_ia(
     if plantilla_id_val < 0:
         plantilla_id_val = 0
 
-    categoria_val = str(datos.get("categoria", "") or "").upper()
-    if categoria_val not in {"COTIZACIONES", "ANUNCIO", "GENERAL"}:
-        categoria_val = ""
+    # Normalizar categoría: una palabra en mayúsculas
+    categoria_val = str(datos.get("categoria", "") or "").upper().strip()
+    # Limpiar espacios y tomar solo la primera palabra si hay varias
+    if " " in categoria_val:
+        categoria_val = categoria_val.split()[0]
+    # Si está vacía, asignar GENERAL por defecto
+    if not categoria_val:
+        categoria_val = "GENERAL"
+    # Limitar longitud a 20 caracteres para evitar categorías muy largas
+    categoria_val = categoria_val[:20]
 
     borrador_texto = str(datos.get("borrador", ""))
     auto_enviar_val = bool(datos.get("auto_enviar", False))

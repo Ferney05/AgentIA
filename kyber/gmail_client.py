@@ -3,6 +3,7 @@ import imaplib
 import email
 import time
 import re
+from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.utils import parseaddr
 from email.header import decode_header
@@ -19,23 +20,120 @@ def _abrir_conexion(usuario: str | None = None, clave_app: str | None = None) ->
     return conexion
 
 
-def obtener_ids_no_leidos(max_total: int | None = None, usuario: str | None = None, clave_app: str | None = None, desde_fecha: str | None = None) -> List[str]:
+def obtener_ids_no_leidos(max_total: int | None = None, usuario: str | None = None, clave_app: str | None = None, desde_fecha: str | None = None, usuario_id: int | None = None) -> List[str]:
+    from datetime import datetime, timedelta
+    import email.utils
+    
     conexion = _abrir_conexion(usuario, clave_app)
     conexion.select("INBOX")
     
-    # Construir el comando de búsqueda: correos no leídos desde una fecha.
-    # El comando 'SEARCH' no debe incluir el nombre de la carpeta (INBOX), ya que se seleccionó arriba.
-    search_criteria = 'UNSEEN'
-    if desde_fecha:
-        search_criteria += f' SINCE {desde_fecha}'
+    # Detectar día de la semana y configuración de filtro
+    hoy = datetime.now()
+    dia_semana = hoy.weekday()  # 0=lunes, 1=martes, ..., 6=domingo
+    dias_nombres = ["LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO", "DOMINGO"]
     
-    print(f"DEBUG: Criterio de búsqueda IMAP: {search_criteria}")
-    estado, datos = conexion.search(None, search_criteria)
+    # Verificar configuración de filtro por fecha específica
+    filtro_fecha_especifica = 0
+    fecha_filtro = None
+    
+    if usuario_id:
+        try:
+            from .db import obtener_usuario_por_id
+            usuario_data = obtener_usuario_por_id(usuario_id)
+            if usuario_data and len(usuario_data) > 11:
+                filtro_fecha_especifica = usuario_data[11] if usuario_data[11] is not None else 0
+                fecha_filtro = usuario_data[12] if len(usuario_data) > 12 and usuario_data[12] else None
+        except Exception as e:
+            print(f"⚠️  Error obteniendo configuración de filtro: {e}")
+    
+    print(f"\n{'='*60}")
+    print(f"🔍 ESCANEO INICIADO - Hoy es {dias_nombres[dia_semana]} {hoy.strftime('%d/%m/%Y %H:%M')}")
+    if filtro_fecha_especifica == 1 and fecha_filtro:
+        print(f"📅 FILTRADO POR FECHA ESPECÍFICA: {fecha_filtro}")
+    print(f"{'='*60}")
+    
+    # Buscar correos no leídos
+    estado, datos = conexion.search(None, 'UNSEEN')
     ids = datos[0].split()
-    conexion.logout()
     ids_decod = [i.decode() for i in ids]
+    
+    print(f"📬 Total de correos NO LEÍDOS en bandeja: {len(ids_decod)}")
+    
+    if ids_decod:
+        ids_filtrados = []
+        
+        # Definir rango de fechas
+        if filtro_fecha_especifica == 1 and fecha_filtro:
+            # Filtrar por fecha específica
+            try:
+                fecha_obj = datetime.strptime(fecha_filtro, '%Y-%m-%d')
+                fecha_inicio = fecha_obj.replace(hour=0, minute=0, second=0, microsecond=0)
+                fecha_fin = fecha_obj.replace(hour=23, minute=59, second=59, microsecond=999999)
+                print(f"📅 Filtrando correos de la fecha específica: {fecha_filtro}")
+            except Exception as e:
+                print(f"⚠️  Error parseando fecha específica, usando fecha actual: {e}")
+                fecha_inicio = hoy.replace(hour=0, minute=0, second=0, microsecond=0)
+                fecha_fin = hoy.replace(hour=23, minute=59, second=59, microsecond=999999)
+        elif desde_fecha:
+            # Usar la fecha proporcionada (lógica original para lunes)
+            try:
+                # Parsear la fecha en formato IMAP "DD-Mon-YYYY"
+                fecha_dt = datetime.strptime(desde_fecha, '%d-%b-%Y')
+                fecha_inicio = fecha_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+                fecha_fin = hoy.replace(hour=23, minute=59, second=59, microsecond=999999)
+                print(f"📅 Filtrando correos desde fecha proporcionada: {desde_fecha}")
+            except Exception as e:
+                print(f"⚠️  Error parseando fecha proporcionada, usando fecha actual: {e}")
+                fecha_inicio = hoy.replace(hour=0, minute=0, second=0, microsecond=0)
+                fecha_fin = hoy.replace(hour=23, minute=59, second=59, microsecond=999999)
+        else:
+            # Lógica normal según día de la semana
+            if dia_semana == 0:  # LUNES
+                # Leer correos del sábado (hace 2 días), domingo (hace 1 día) y lunes (hoy)
+                fecha_sabado = (hoy - timedelta(days=2)).replace(hour=0, minute=0, second=0, microsecond=0)
+                fecha_inicio = fecha_sabado
+                fecha_fin = hoy.replace(hour=23, minute=59, second=59, microsecond=999999)
+                print(f"📅 Filtrando correos desde SÁBADO {fecha_inicio.strftime('%d/%m/%Y')} hasta LUNES {fecha_fin.strftime('%d/%m/%Y')}")
+            else:  # MARTES a DOMINGO
+                # Leer solo correos de HOY
+                fecha_inicio = hoy.replace(hour=0, minute=0, second=0, microsecond=0)
+                fecha_fin = hoy.replace(hour=23, minute=59, second=59, microsecond=999999)
+                print(f"📅 Filtrando correos solo de HOY {dias_nombres[dia_semana]} {fecha_inicio.strftime('%d/%m/%Y')}")
+        
+        # Filtrar correos por fecha
+        for correo_id in ids_decod:
+            try:
+                estado_fetch, datos_fetch = conexion.fetch(correo_id.encode(), '(BODY.PEEK[HEADER.FIELDS (DATE)])')
+                if estado_fetch == 'OK':
+                    header_data = datos_fetch[0][1]
+                    msg = email.message_from_bytes(header_data)
+                    fecha_str = msg.get('Date', '')
+                    
+                    if fecha_str:
+                        fecha_tuple = email.utils.parsedate_tz(fecha_str)
+                        if fecha_tuple:
+                            fecha_correo = datetime.fromtimestamp(email.utils.mktime_tz(fecha_tuple))
+                            
+                            # Verificar si el correo está en el rango de fechas
+                            if fecha_inicio <= fecha_correo <= fecha_fin:
+                                ids_filtrados.append(correo_id)
+                            else:
+                                print(f"🔍 Correo ID {correo_id}: {fecha_correo.strftime('%d/%m/%Y %H:%M')} - Fuera del rango")
+                    else:
+                        print(f"⚠️  Correo ID {correo_id} no tiene fecha, incluyendo por seguridad")
+                        ids_filtrados.append(correo_id)
+            except Exception as e:
+                print(f"⚠️  Error procesando correo ID {correo_id}: {e}")
+                ids_filtrados.append(correo_id)
+        
+        ids_decod = ids_filtrados
+        print(f"✅ Correos que cumplen el filtro de fecha: {len(ids_decod)}")
+    
+    conexion.logout()
+    
     if max_total is not None:
         ids_decod = ids_decod[-max_total:]
+    
     return ids_decod
 
 
@@ -434,3 +532,99 @@ def existe_borrador_para_thread_id(thread_id: str, usuario: str | None = None, c
             conexion.logout()
         except Exception:
             pass
+
+
+def detectar_link_unsubscribe(mensaje: email.message.Message) -> str | None:
+    """Detecta el link de cancelación de suscripción en un correo."""
+    # Buscar en header List-Unsubscribe
+    list_unsub = mensaje.get("List-Unsubscribe", "")
+    if list_unsub:
+        # Extraer URL del header
+        match = re.search(r'<(https?://[^>]+)>', list_unsub)
+        if match:
+            return match.group(1)
+    
+    # Buscar en el cuerpo del correo
+    cuerpo = ""
+    if mensaje.is_multipart():
+        for parte in mensaje.walk():
+            tipo = parte.get_content_type()
+            if tipo == "text/html":
+                try:
+                    html = parte.get_payload(decode=True).decode(
+                        parte.get_content_charset() or "utf-8",
+                        errors="replace"
+                    )
+                    cuerpo = html
+                    break
+                except Exception:
+                    pass
+    else:
+        try:
+            cuerpo = mensaje.get_payload(decode=True).decode(
+                mensaje.get_content_charset() or "utf-8",
+                errors="replace"
+            )
+        except Exception:
+            pass
+    
+    if cuerpo:
+        # Buscar links con palabras clave
+        patrones = [
+            r'href=["\']([^"\']*(?:unsubscribe|opt-out|remove|cancelar|baja)[^"\']*)["\']',
+            r'(https?://[^\s<>"]+(?:unsubscribe|opt-out|remove|cancelar|baja)[^\s<>"]*)',
+        ]
+        for patron in patrones:
+            match = re.search(patron, cuerpo, re.IGNORECASE)
+            if match:
+                return match.group(1)
+    
+    return None
+
+
+def eliminar_correos_por_ids(ids: List[str], usuario: str | None = None, clave_app: str | None = None) -> int:
+    """Elimina permanentemente correos por sus IDs."""
+    if not ids:
+        return 0
+    
+    conexion = _abrir_conexion(usuario, clave_app)
+    conexion.select("INBOX")
+    eliminados = 0
+    
+    for correo_id in ids:
+        try:
+            # Marcar como eliminado
+            conexion.store(correo_id, "+FLAGS", "\\Deleted")
+            eliminados += 1
+        except Exception:
+            pass
+    
+    # Expunge para eliminar permanentemente
+    try:
+        conexion.expunge()
+    except Exception:
+        pass
+    
+    conexion.logout()
+    return eliminados
+
+
+def obtener_correos_antiguos(dias: int = 90, max_total: int = 100, usuario: str | None = None, clave_app: str | None = None) -> List[str]:
+    """Obtiene IDs de correos más antiguos que X días."""
+    conexion = _abrir_conexion(usuario, clave_app)
+    conexion.select("INBOX")
+    
+    # Calcular fecha límite
+    fecha_limite = datetime.utcnow() - timedelta(days=dias)
+    fecha_str = fecha_limite.strftime("%d-%b-%Y")
+    
+    # Buscar correos antes de esa fecha
+    estado, datos = conexion.search(None, f'BEFORE {fecha_str}')
+    ids = datos[0].split()
+    conexion.logout()
+    
+    ids_decod = [i.decode() for i in ids]
+    if max_total is not None:
+        ids_decod = ids_decod[:max_total]
+    
+    return ids_decod

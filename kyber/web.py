@@ -40,6 +40,27 @@ from .db import (
     obtener_firma_usuario,
     obtener_siguiente_prioridad,
     obtener_regla_por_id,
+    obtener_categorias_unicas,
+    # Nuevas funciones
+    registrar_remitente,
+    es_remitente_nuevo,
+    obtener_remitentes_nuevos,
+    obtener_todos_remitentes,
+    aprobar_remitente,
+    bloquear_remitente_desde_nuevos,
+    agregar_remitente_bloqueado,
+    obtener_remitentes_bloqueados,
+    esta_bloqueado,
+    esta_silenciado,
+    desbloquear_remitente,
+    desbloquear_remitente_por_email,
+    registrar_suscripcion,
+    obtener_suscripciones,
+    marcar_suscripcion_cancelada,
+    crear_regla_organizacion,
+    obtener_reglas_organizacion,
+    toggle_regla_organizacion,
+    eliminar_regla_organizacion,
 )
 from .gmail_client import (
     crear_borrador,
@@ -51,6 +72,10 @@ from .gmail_client import (
     obtener_historial_por_thread,
     existe_borrador_para_message_id,
     existe_borrador_para_thread_id,
+    # Nuevas funciones
+    detectar_link_unsubscribe,
+    eliminar_correos_por_ids,
+    obtener_correos_antiguos,
 )
 
 
@@ -84,33 +109,46 @@ def _user_info(usuario):
     if not usuario:
         return None
     # Asegurarse de que 'usuario' tenga suficientes elementos, proporcionando valores por defecto si faltan
-    # Los nuevos campos (gemini_key en adelante) pueden ser None si el usuario es antiguo o no los ha configurado
-    _id, email, _ph, _creado, *extra_fields = usuario
+    print(f"DEBUG: [WEB] Usuario completo recibido: {usuario}")
     
-    gemini_key = extra_fields[0] if len(extra_fields) > 0 else None
-    gmail_user = extra_fields[1] if len(extra_fields) > 1 else None
-    gmail_pwd = extra_fields[2] if len(extra_fields) > 2 else None
-    batch = extra_fields[3] if len(extra_fields) > 3 else 10
-    max_scan = extra_fields[4] if len(extra_fields) > 4 else 100
-    activo = extra_fields[5] if len(extra_fields) > 5 else 0
-    contexto_negocio = extra_fields[6] if len(extra_fields) > 6 else ""
-
-    username = email.split("@")[0] if "@" in email else email
-    username = username.strip() or email
-    initial = username[0].upper()
-    return {
-        "id": _id, 
-        "email": email, 
-        "username": username, 
-        "initial": initial,
-        "gemini_api_key": gemini_key,
-        "gmail_user": gmail_user,
-        "gmail_password": gmail_pwd,
-        "scan_batch": batch,
-        "scan_max": max_scan,
-        "agente_activo": bool(activo),
-        "contexto_negocio": contexto_negocio
-    }
+    # Los nuevos campos (gemini_key en adelante) pueden ser None si el usuario es antiguo o no los ha configurado
+    try:
+        _id, email, _ph, _creado, *extra_fields = usuario
+        print(f"DEBUG: [WEB] Descomponiendo usuario: _id={_id}, email={email}, extra_fields={extra_fields}")
+        
+        gemini_key = extra_fields[0] if len(extra_fields) > 0 else None
+        gmail_user = extra_fields[1] if len(extra_fields) > 1 else None
+        gmail_pwd = extra_fields[2] if len(extra_fields) > 2 else None
+        batch = extra_fields[3] if len(extra_fields) > 3 else 10
+        max_scan = extra_fields[4] if len(extra_fields) > 4 else 100
+        activo = extra_fields[5] if len(extra_fields) > 5 else 0
+        contexto_negocio = extra_fields[6] if len(extra_fields) > 6 else ""
+        filtro_fecha_especifica = extra_fields[7] if len(extra_fields) > 7 else 0
+        fecha_filtro = extra_fields[8] if len(extra_fields) > 8 else ""
+        username = email.split("@")[0] if "@" in email else email
+        username = username.strip() or email
+        initial = username[0].upper()
+        
+        user_info = {
+            "id": _id, 
+            "email": email, 
+            "username": username, 
+            "initial": initial,
+            "gemini_api_key": gemini_key,
+            "gmail_user": gmail_user,
+            "gmail_password": gmail_pwd,
+            "scan_batch": batch,
+            "scan_max": max_scan,
+            "agente_activo": bool(activo),
+            "contexto_negocio": contexto_negocio,
+            "filtro_fecha_especifica": filtro_fecha_especifica,
+            "fecha_filtro": fecha_filtro
+        }
+        print(f"DEBUG: [WEB] User info final: {user_info}")
+        return user_info
+    except Exception as e:
+        print(f"DEBUG: [WEB] Error en _user_info: {e}")
+        return None
 
 
 @app.on_event("startup")
@@ -147,8 +185,7 @@ def dashboard(
         page_val = 1
 
     cat = (filtro_categoria or "").strip().upper() or None
-    if cat not in {None, "GENERAL", "COTIZACIONES", "ANUNCIO"}:
-        cat = None
+    # Ya no validamos contra un conjunto fijo, aceptamos cualquier categoría
     acc = (filtro_accion or "").strip().upper() or None
 
     offset = (page_val - 1) * page_size
@@ -169,6 +206,15 @@ def dashboard(
         logs.append(
             (fecha_fmt, fila[1], fila[2], fila[3], fila[4], fila[5], fila[6])
         )
+    
+    # Obtener categorías dinámicas para el filtro
+    categorias_disponibles = obtener_categorias_unicas(usuario_id=user_info["id"])
+    
+    # Obtener estadísticas de Inbox Zero
+    remitentes_nuevos = obtener_remitentes_nuevos(usuario_id=user_info["id"])
+    remitentes_bloqueados = obtener_remitentes_bloqueados(usuario_id=user_info["id"])
+    suscripciones = obtener_suscripciones(usuario_id=user_info["id"])
+    reglas_org = obtener_reglas_organizacion(usuario_id=user_info["id"])
     regla_editar = obtener_regla_por_id(edit_id) if edit_id is not None else None
     respuestas = obtener_respuestas(usuario_id=user_info["id"])
     try:
@@ -208,6 +254,12 @@ def dashboard(
         "has_next": has_next,
         "filtro_categoria": cat,
         "filtro_accion": acc,
+        "categorias_disponibles": categorias_disponibles,
+        # Inbox Zero
+        "remitentes_nuevos": remitentes_nuevos,
+        "remitentes_bloqueados": remitentes_bloqueados,
+        "suscripciones": suscripciones,
+        "reglas_organizacion": reglas_org,
     }
     return templates.TemplateResponse("index.html", contexto)
 
@@ -427,11 +479,12 @@ def _ejecutar_scan(user_info: dict) -> int:
     ahora = ahora_dt.isoformat()
     
     # Lógica de fecha para el escaneo:
-    # Lunes: leer desde el sábado. Martes a Viernes: leer solo hoy.
-    if ahora_dt.weekday() == 0:  # Lunes
-        dias_atras = 2 # Sábado, Domingo, Lunes
+    # Lunes: leer desde sábado (2 días atrás) para incluir sábado, domingo y lunes.
+    # Martes a Viernes: leer solo correos del día actual.
+    if ahora_dt.weekday() == 0:  # Lunes (weekday=0)
+        dias_atras = 2 # Incluir sábado (hace 2 días), domingo (hace 1 día) y lunes (hoy)
     else:
-        dias_atras = 0 # Solo hoy
+        dias_atras = 0 # Solo correos de hoy
     
     fecha_inicio = ahora_dt - timedelta(days=dias_atras)
     # Formato IMAP: "DD-Mon-YYYY" (ej: "27-Feb-2026")
@@ -458,7 +511,7 @@ def _ejecutar_scan(user_info: dict) -> int:
 
     print(f"DEBUG: Iniciando escaneo para {gmail_user} desde {desde_fecha_imap}")
     try:
-        ids = obtener_ids_no_leidos(max_total, usuario=gmail_user, clave_app=gmail_pwd, desde_fecha=desde_fecha_imap)
+        ids = obtener_ids_no_leidos(max_total, usuario=gmail_user, clave_app=gmail_pwd, desde_fecha=desde_fecha_imap, usuario_id=user_info["id"])
         print(f"DEBUG: IDs encontrados: {len(ids)}")
     except Exception as e:
         print(f"DEBUG: Error en obtener_ids_no_leidos: {e}")
@@ -478,6 +531,50 @@ def _ejecutar_scan(user_info: dict) -> int:
         ids_para_no_leer: list[str] = []
 
         for correo in correos:
+            # Registrar remitente
+            from_email = correo.get("from_email") or correo["remitente"]
+            registrar_remitente(from_email, correo["remitente"], user_info["id"])
+            
+            # Verificar si está bloqueado o silenciado
+            if esta_bloqueado(from_email, user_info["id"]):
+                # Eliminar correo bloqueado
+                try:
+                    eliminar_correos_por_ids([correo["id"]], usuario=gmail_user, clave_app=gmail_pwd)
+                    print(f"DEBUG: Correo de {from_email} eliminado (bloqueado)")
+                except Exception:
+                    pass
+                continue
+            
+            if esta_silenciado(from_email, user_info["id"]):
+                # Marcar como leído y archivar
+                ids_para_marcar.append(correo["id"])
+                print(f"DEBUG: Correo de {from_email} silenciado")
+                continue
+            
+            # Detectar suscripciones con IA y link de cancelación
+            # Buscar link de unsubscribe en el cuerpo del correo (texto plano)
+            link_unsub = ""
+            cuerpo_lower = (correo["cuerpo"] or "").lower()
+            if "unsubscribe" in cuerpo_lower or "cancelar suscripción" in cuerpo_lower or "darse de baja" in cuerpo_lower:
+                # Extraer URL del cuerpo
+                import re
+                patrones = [
+                    r'(https?://[^\s<>"]+(?:unsubscribe|opt-out|remove|cancelar|baja)[^\s<>"]*)',
+                ]
+                for patron in patrones:
+                    match = re.search(patron, correo["cuerpo"] or "", re.IGNORECASE)
+                    if match:
+                        link_unsub = match.group(1)
+                        break
+            
+            es_newsletter = any(palabra in from_email.lower() for palabra in ["newsletter", "marketing", "noreply", "no-reply", "info@", "news@"])
+            tiene_unsub = bool(link_unsub)
+            
+            # Si tiene link de unsubscribe o parece newsletter, registrar como suscripción
+            if tiene_unsub or es_newsletter:
+                registrar_suscripcion(from_email, correo["remitente"], link_unsub, user_info["id"])
+                print(f"DEBUG: Suscripción detectada de {from_email} - Link: {link_unsub[:50] if link_unsub else 'N/A'}")
+            
             historial_texto = ""
             thr = correo.get("thread_id")
             mensaje_id = correo.get("message_id") or ""
@@ -534,7 +631,11 @@ def _ejecutar_scan(user_info: dict) -> int:
             asunto_u = (correo["asunto"] or "").upper()
             cuerpo_u = (correo["cuerpo"] or "").upper()
 
-            categoria = (resultado.get("categoria") or "").upper()
+            categoria = (resultado.get("categoria") or "GENERAL").upper().strip()
+            # Limpiar y normalizar: solo la primera palabra
+            if " " in categoria:
+                categoria = categoria.split()[0]
+            categoria = categoria[:20]  # Limitar longitud
             
             # LÓGICA DE ANUNCIOS: Bloqueo absoluto
             # Si la IA clasifica como ANUNCIO, marcamos leído y NO guardamos nada en DB.
@@ -571,8 +672,9 @@ def _ejecutar_scan(user_info: dict) -> int:
             tiene_pn = pn_hyphen or pn_plain
             tiene_serial = bool(re.search(r"\b[0-9A-Z\-]{10,}\b", asunto_u) or re.search(r"\b[0-9A-Z\-]{10,}\b", cuerpo_u))
             
+            # Detectar si es cotización basado en señales (la IA puede usar COTIZACION o COTIZACIONES)
             es_cotizacion = (
-                categoria == "COTIZACIONES"
+                categoria in ("COTIZACION", "COTIZACIONES")
                 or palabras_cot
                 or (tiene_imagen and señal_precio)
                 or (menciona_marca and posible_modelo)
@@ -580,7 +682,8 @@ def _ejecutar_scan(user_info: dict) -> int:
             )
 
             if es_cotizacion:
-                categoria = "COTIZACIONES"
+                # Forzar categoría a COTIZACION (singular) para consistencia
+                categoria = "COTIZACION"
                 # Si el agente va a responder pidiendo datos, lo marcamos como leído.
                 # Si ya es una cotización completa (no hay acción del agente), lo dejamos NO LEÍDO para el humano.
                 if resultado.get("accion") == "BORRADOR":
@@ -598,10 +701,6 @@ def _ejecutar_scan(user_info: dict) -> int:
                         ids_para_no_leer.remove(correo["id"])
                     if correo["id"] not in ids_para_marcar:
                         ids_para_marcar.append(correo["id"])
-            elif categoria == "ANUNCIO":
-                # Ya manejado arriba, pero por seguridad:
-                resultado["accion"] = "NADA"
-                resultado["borrador"] = ""
             else:
                 # Preguntas generales o casos no claros se quedan como NO LEÍDOS para revisión
                 if correo["id"] not in ids_para_no_leer:
@@ -762,11 +861,27 @@ def settings_update(
     scan_batch: int = Form(default=10),
     scan_max: int = Form(default=100),
     contexto_negocio: str | None = Form(default=None),
+    filtro_fecha_especifica: str = Form(default=""),
+    fecha_filtro: str | None = Form(default=None),
 ) -> RedirectResponse:
     usuario = _get_current_user(request)
     if not usuario:
         return RedirectResponse(url="/auth/login", status_code=303)
+    
+    # IMPORTANTE: Forzar recarga de datos del usuario para evitar sesión desincronizada
+    print(f"DEBUG: [WEB] Sesión actual - user_id de sesión: {request.session.get('user_id')}")
+    
     user_info = _user_info(usuario)
+    print(f"DEBUG: [WEB] User info obtenido: {user_info}")
+    
+    # Convertir checkbox a entero
+    filtro_fecha_especifica_val = 1 if filtro_fecha_especifica == "1" else 0
+    
+    print(f"DEBUG: [WEB] Guardando configuración:")
+    print(f"  - filtro_fecha_especifica (raw): '{filtro_fecha_especifica}'")
+    print(f"  - filtro_fecha_especifica (val): {filtro_fecha_especifica_val}")
+    print(f"  - fecha_filtro: '{fecha_filtro}'")
+    print(f"  - usuario_id: {user_info['id']}")
     
     from .db import actualizar_configuracion_usuario
     actualizar_configuracion_usuario(
@@ -777,7 +892,10 @@ def settings_update(
         scan_batch=scan_batch,
         scan_max=scan_max,
         contexto_negocio=contexto_negocio,
+        filtro_fecha_especifica=filtro_fecha_especifica_val,
+        fecha_filtro=fecha_filtro if fecha_filtro and fecha_filtro.strip() else None,
     )
+    print("DEBUG: [WEB] Configuración guardada exitosamente")
     return RedirectResponse(url="/?view=settings&toast=config_actualizada", status_code=303)
 
 
@@ -810,8 +928,7 @@ def logs_clear_json(
         return {"ok": False, "error": "unauthorized"}
     user_info = _user_info(usuario)
     cat = (filtro_categoria or "").strip().upper() or None
-    if cat not in {None, "GENERAL", "COTIZACIONES", "ANUNCIO"}:
-        cat = None
+    # Ya no validamos contra un conjunto fijo
     acc = (filtro_accion or "").strip().upper() or None
 
     categoria = cat
@@ -906,3 +1023,351 @@ def logout(request: Request) -> RedirectResponse:
     request.session.clear()
     _FER_DEV_SHEI_200226 = "F-E-R-D-E-V-S-H-E-I-20-02-26"
     return RedirectResponse(url="/auth/login", status_code=303)
+
+
+# ============================================
+# RUTAS PARA INBOX ZERO
+# ============================================
+
+@app.get("/inbox-zero/nuevos-remitentes", response_class=HTMLResponse)
+def nuevos_remitentes_get(request: Request) -> HTMLResponse:
+    usuario = _get_current_user(request)
+    if not usuario:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    user_info = _user_info(usuario)
+    
+    # Obtener TODOS los remitentes con su estado
+    todos_remitentes = obtener_todos_remitentes(usuario_id=user_info["id"], limite=200)
+    
+    contexto = {
+        "request": request,
+        "user": user_info,
+        "todos_remitentes": todos_remitentes,
+        "view": "nuevos_remitentes",
+    }
+    return templates.TemplateResponse("inbox_zero.html", contexto)
+
+
+@app.post("/inbox-zero/aprobar/{remitente_id}")
+def aprobar_remitente_post(remitente_id: int, request: Request) -> RedirectResponse:
+    usuario = _get_current_user(request)
+    if not usuario:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    
+    aprobar_remitente(remitente_id)
+    return RedirectResponse(url="/inbox-zero/nuevos-remitentes?toast=remitente_aprobado", status_code=303)
+
+
+@app.post("/inbox-zero/bloquear-nuevo/{remitente_id}")
+def bloquear_nuevo_post(remitente_id: int, request: Request) -> RedirectResponse:
+    usuario = _get_current_user(request)
+    if not usuario:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    user_info = _user_info(usuario)
+    
+    bloquear_remitente_desde_nuevos(remitente_id, user_info["id"])
+    return RedirectResponse(url="/inbox-zero/nuevos-remitentes?toast=remitente_bloqueado", status_code=303)
+
+
+@app.post("/inbox-zero/bloquear-directo")
+def bloquear_directo_post(
+    request: Request,
+    email: str = Form(...),
+    nombre: str = Form(default=""),
+    tipo: str = Form(default="bloqueado"),
+) -> RedirectResponse:
+    """Bloquea un remitente directamente desde la tabla de remitentes."""
+    usuario = _get_current_user(request)
+    if not usuario:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    user_info = _user_info(usuario)
+    
+    agregar_remitente_bloqueado(email, nombre, tipo, "Bloqueado desde tabla", user_info["id"])
+    return RedirectResponse(url="/inbox-zero/nuevos-remitentes?toast=remitente_bloqueado", status_code=303)
+
+
+@app.post("/inbox-zero/desbloquear-directo")
+def desbloquear_directo_post(
+    request: Request,
+    email: str = Form(...),
+    redirect_to: str = Form(default="nuevos-remitentes"),
+) -> RedirectResponse:
+    """Desbloquea un remitente directamente desde la tabla."""
+    usuario = _get_current_user(request)
+    if not usuario:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    user_info = _user_info(usuario)
+    
+    # Desbloquear directamente por email
+    desbloquear_remitente_por_email(email, user_info["id"])
+    
+    return RedirectResponse(url=f"/inbox-zero/{redirect_to}?toast=remitente_desbloqueado", status_code=303)
+
+
+@app.get("/inbox-zero/bloqueados", response_class=HTMLResponse)
+def bloqueados_get(request: Request) -> HTMLResponse:
+    usuario = _get_current_user(request)
+    if not usuario:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    user_info = _user_info(usuario)
+    
+    bloqueados = obtener_remitentes_bloqueados(usuario_id=user_info["id"])
+    
+    contexto = {
+        "request": request,
+        "user": user_info,
+        "bloqueados": bloqueados,
+        "view": "bloqueados",
+    }
+    return templates.TemplateResponse("inbox_zero.html", contexto)
+
+
+@app.post("/inbox-zero/bloquear")
+def bloquear_remitente_post(
+    request: Request,
+    email: str = Form(...),
+    nombre: str = Form(default=""),
+    tipo: str = Form(default="bloqueado"),
+    razon: str = Form(default=""),
+) -> RedirectResponse:
+    usuario = _get_current_user(request)
+    if not usuario:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    user_info = _user_info(usuario)
+    
+    agregar_remitente_bloqueado(email, nombre, tipo, razon, user_info["id"])
+    return RedirectResponse(url="/inbox-zero/bloqueados?toast=remitente_bloqueado", status_code=303)
+
+
+@app.post("/inbox-zero/desbloquear/{remitente_id}")
+def desbloquear_remitente_post(remitente_id: int) -> RedirectResponse:
+    desbloquear_remitente(remitente_id)
+    return RedirectResponse(url="/inbox-zero/bloqueados?toast=remitente_desbloqueado", status_code=303)
+
+
+@app.get("/inbox-zero/suscripciones", response_class=HTMLResponse)
+def suscripciones_get(request: Request) -> HTMLResponse:
+    usuario = _get_current_user(request)
+    if not usuario:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    user_info = _user_info(usuario)
+    
+    suscripciones = obtener_suscripciones(usuario_id=user_info["id"])
+    
+    contexto = {
+        "request": request,
+        "user": user_info,
+        "suscripciones": suscripciones,
+        "view": "suscripciones",
+    }
+    return templates.TemplateResponse("inbox_zero.html", contexto)
+
+
+@app.post("/inbox-zero/cancelar-suscripcion/{suscripcion_id}")
+def cancelar_suscripcion_post(suscripcion_id: int) -> RedirectResponse:
+    marcar_suscripcion_cancelada(suscripcion_id)
+    return RedirectResponse(url="/inbox-zero/suscripciones?toast=suscripcion_cancelada", status_code=303)
+
+
+@app.get("/inbox-zero/organizacion", response_class=HTMLResponse)
+def organizacion_get(request: Request) -> HTMLResponse:
+    usuario = _get_current_user(request)
+    if not usuario:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    user_info = _user_info(usuario)
+    
+    reglas = obtener_reglas_organizacion(usuario_id=user_info["id"])
+    
+    contexto = {
+        "request": request,
+        "user": user_info,
+        "reglas_org": reglas,
+        "view": "organizacion",
+    }
+    return templates.TemplateResponse("inbox_zero.html", contexto)
+
+
+# ============================================
+# RUTAS PARA LIMPIEZA PROFESIONAL
+# ============================================
+
+@app.get("/inbox-zero/limpieza", response_class=HTMLResponse)
+def limpieza_get(request: Request) -> HTMLResponse:
+    usuario = _get_current_user(request)
+    if not usuario:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    user_info = _user_info(usuario)
+    
+    # Importar funciones de limpieza
+    from .limpieza import analizar_correos_antiguos, obtener_estadisticas_limpieza, obtener_categorias_limpieza
+    
+    # Obtener sugerencias de limpieza
+    sugerencias = analizar_correos_antiguos(usuario_id=user_info["id"])
+    
+    # Obtener estadísticas
+    estadisticas = obtener_estadisticas_limpieza(usuario_id=user_info["id"])
+    
+    # Obtener categorías personalizadas
+    categorias = obtener_categorias_limpieza(usuario_id=user_info["id"])
+    
+    contexto = {
+        "request": request,
+        "user": user_info,
+        "sugerencias": sugerencias,
+        "estadisticas": estadisticas,
+        "categorias": categorias,
+        "view": "limpieza",
+    }
+    return templates.TemplateResponse("inbox_zero.html", contexto)
+
+
+@app.post("/inbox-zero/analizar-limpieza")
+def analizar_limpieza_post(request: Request) -> RedirectResponse:
+    usuario = _get_current_user(request)
+    if not usuario:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    user_info = _user_info(usuario)
+    
+    from .limpieza import analizar_correos_antiguos
+    
+    # Analizar nuevamente (recargar datos)
+    analizar_correos_antiguos(usuario_id=user_info["id"])
+    
+    return RedirectResponse(url="/inbox-zero/limpieza?toast=analisis_completado", status_code=303)
+
+
+@app.post("/inbox-zero/crear-categoria-limpieza")
+def crear_categoria_limpieza_post(
+    request: Request,
+    nombre: str = Form(...),
+    descripcion: str = Form(default=""),
+    remitentes: str = Form(default=""),
+) -> RedirectResponse:
+    usuario = _get_current_user(request)
+    if not usuario:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    user_info = _user_info(usuario)
+    
+    from .limpieza import crear_categoria_limpieza
+    
+    # Procesar lista de remitentes
+    lista_remitentes = [r.strip() for r in remitentes.split(',') if r.strip()]
+    
+    if crear_categoria_limpieza(
+        usuario_id=user_info["id"],
+        nombre=nombre,
+        descripcion=descripcion,
+        remitentes=lista_remitentes
+    ):
+        return RedirectResponse(url="/inbox-zero/limpieza?toast=categoria_creada", status_code=303)
+    else:
+        return RedirectResponse(url="/inbox-zero/limpieza?toast=error_categoria", status_code=303)
+
+
+@app.post("/inbox-zero/ejecutar-limpieza/{categoria_id}")
+def ejecutar_limpieza_post(categoria_id: int, request: Request) -> RedirectResponse:
+    usuario = _get_current_user(request)
+    if not usuario:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    user_info = _user_info(usuario)
+    
+    from .limpieza import ejecutar_limpieza_categoria
+    
+    # Ejecutar limpieza
+    resultado = ejecutar_limpieza_categoria(categoria_id, user_info["id"])
+    
+    if 'error' in resultado:
+        return RedirectResponse(url="/inbox-zero/limpieza?toast=error_ejecucion", status_code=303)
+    else:
+        return RedirectResponse(url="/inbox-zero/limpieza?toast=limpieza_ejecutada", status_code=303)
+
+
+@app.post("/inbox-zero/crear-regla-org")
+def crear_regla_org_post(
+    request: Request,
+    nombre: str = Form(...),
+    tipo: str = Form(...),
+    condicion_campo: str = Form(...),
+    condicion_valor: str = Form(...),
+    accion: str = Form(...),
+) -> RedirectResponse:
+    """Crea una nueva regla de organización."""
+    print(f"DEBUG: [WEB] Creando regla org: nombre={nombre}, tipo={tipo}, campo={condicion_campo}, valor={condicion_valor}")
+    
+    usuario = _get_current_user(request)
+    if not usuario:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    user_info = _user_info(usuario)
+    
+    from .db import crear_regla_organizacion
+    crear_regla_organizacion(nombre, tipo, condicion_campo, condicion_valor, accion, user_info["id"])
+    print(f"DEBUG: [WEB] Regla org creada, redirigiendo...")
+    return RedirectResponse(url="/inbox-zero/organizacion?toast=regla_creada", status_code=303)
+
+
+@app.post("/inbox-zero/toggle-regla/{regla_id}")
+def toggle_regla_post(regla_id: int) -> RedirectResponse:
+    toggle_regla_organizacion(regla_id)
+    return RedirectResponse(url="/inbox-zero/organizacion?toast=regla_actualizada", status_code=303)
+
+
+@app.post("/inbox-zero/eliminar-regla/{regla_id}")
+def eliminar_regla_org_post(regla_id: int) -> RedirectResponse:
+    eliminar_regla_organizacion(regla_id)
+    return RedirectResponse(url="/inbox-zero/organizacion?toast=regla_eliminada", status_code=303)
+
+
+@app.get("/inbox-zero/limpieza", response_class=HTMLResponse)
+def limpieza_get(request: Request) -> HTMLResponse:
+    usuario = _get_current_user(request)
+    if not usuario:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    user_info = _user_info(usuario)
+    
+    gmail_user = user_info.get("gmail_user")
+    gmail_pwd = user_info.get("gmail_password")
+    
+    sugerencias = []
+    if gmail_user and gmail_pwd:
+        try:
+            # Obtener correos antiguos
+            ids_antiguos = obtener_correos_antiguos(dias=90, max_total=500, usuario=gmail_user, clave_app=gmail_pwd)
+            if ids_antiguos:
+                sugerencias.append({
+                    "tipo": "antiguos",
+                    "titulo": f"Correos antiguos (>90 días)",
+                    "cantidad": len(ids_antiguos),
+                    "descripcion": f"{len(ids_antiguos)} correos de hace más de 90 días",
+                })
+        except Exception as e:
+            print(f"Error al obtener correos antiguos: {e}")
+    
+    contexto = {
+        "request": request,
+        "user": user_info,
+        "sugerencias": sugerencias,
+        "view": "limpieza",
+    }
+    return templates.TemplateResponse("inbox_zero.html", contexto)
+
+
+@app.post("/inbox-zero/limpiar-antiguos")
+def limpiar_antiguos_post(request: Request, dias: int = Form(default=90)) -> RedirectResponse:
+    usuario = _get_current_user(request)
+    if not usuario:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    user_info = _user_info(usuario)
+    
+    gmail_user = user_info.get("gmail_user")
+    gmail_pwd = user_info.get("gmail_password")
+    
+    if not gmail_user or not gmail_pwd:
+        return RedirectResponse(url="/inbox-zero/limpieza?toast=error_credenciales", status_code=303)
+    
+    try:
+        ids = obtener_correos_antiguos(dias=dias, max_total=500, usuario=gmail_user, clave_app=gmail_pwd)
+        eliminados = eliminar_correos_por_ids(ids, usuario=gmail_user, clave_app=gmail_pwd)
+        return RedirectResponse(url=f"/inbox-zero/limpieza?toast=limpieza_ok&count={eliminados}", status_code=303)
+    except Exception as e:
+        print(f"Error al limpiar correos: {e}")
+        return RedirectResponse(url="/inbox-zero/limpieza?toast=error_limpieza", status_code=303)

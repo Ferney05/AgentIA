@@ -59,6 +59,7 @@
         </div>
         <nav class="mt-4 space-y-1 text-sm">
           <a href="/?view=dashboard" class="block rounded-md px-3 py-2 {% if view == 'dashboard' %}bg-slate-800 text-slate-100{% else %}text-slate-300 hover:bg-slate-800/60{% endif %}">Dashboard</a>
+          <a href="/inbox-zero/nuevos-remitentes" class="block rounded-md px-3 py-2 {% if view in ['nuevos_remitentes', 'bloqueados', 'suscripciones', 'limpieza', 'organizacion'] %}bg-slate-800 text-slate-100{% else %}text-slate-300 hover:bg-slate-800/60{% endif %}">MailFlow</a>
           <a href="/?view=rules" class="block rounded-md px-3 py-2 {% if view == 'rules' %}bg-slate-800 text-slate-100{% else %}text-slate-300 hover:bg-slate-800/60{% endif %}">Reglas de IA</a>
           <a href="/?view=respuestas" class="block rounded-md px-3 py-2 {% if view == 'respuestas' %}bg-slate-800 text-slate-100{% else %}text-slate-300 hover:bg-slate-800/60{% endif %}">Respuestas</a>
           <a href="/?view=settings" class="block rounded-md px-3 py-2 {% if view == 'settings' %}bg-slate-800 text-slate-100{% else %}text-slate-300 hover:bg-slate-800/60{% endif %}">Configuración</a>
@@ -84,6 +85,7 @@
         </div>
         <nav class="space-y-1 text-sm">
           <a href="/?view=dashboard" class="block rounded-md px-3 py-2 {% if view == 'dashboard' %}bg-slate-800 text-slate-100{% else %}text-slate-300 hover:bg-slate-800/60{% endif %}">Dashboard</a>
+          <a href="/inbox-zero/nuevos-remitentes" class="block rounded-md px-3 py-2 {% if view in ['nuevos_remitentes', 'bloqueados', 'suscripciones', 'limpieza', 'organizacion'] %}bg-slate-800 text-slate-100{% else %}text-slate-300 hover:bg-slate-800/60{% endif %}">MailFlow</a>
           <a href="/?view=rules" class="block rounded-md px-3 py-2 {% if view == 'rules' %}bg-slate-800 text-slate-100{% else %}text-slate-300 hover:bg-slate-800/60{% endif %}">Reglas de IA</a>
           <a href="/?view=respuestas" class="block rounded-md px-3 py-2 {% if view == 'respuestas' %}bg-slate-800 text-slate-100{% else %}text-slate-300 hover:bg-slate-800/60{% endif %}">Respuestas</a>
           <a href="/?view=settings" class="block rounded-md px-3 py-2 {% if view == 'settings' %}bg-slate-800 text-slate-100{% else %}text-slate-300 hover:bg-slate-800/60{% endif %}">Configuración</a>

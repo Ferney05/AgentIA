@@ -30,7 +30,7 @@ def crear_base_de_datos(nombre_bd: str = "kyber.db") -> None:
     # 1. Crear tabla usuarios
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS usuarios (
-            id SERIAL PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL,
             creado_en TEXT NOT NULL,
@@ -40,15 +40,22 @@ def crear_base_de_datos(nombre_bd: str = "kyber.db") -> None:
             scan_batch INTEGER DEFAULT 10,
             scan_max INTEGER DEFAULT 100,
             agente_activo INTEGER DEFAULT 0,
-            contexto_negocio TEXT
+            contexto_negocio TEXT,
+            filtro_fecha_especifica INTEGER DEFAULT 0,
+            fecha_filtro TEXT
         )
     """)
     
-    # Migración simple para agregar contexto_negocio si no existe
+    # Migración: Agregar columnas de filtro por fecha si no existen
     try:
-        cursor.execute("ALTER TABLE usuarios ADD COLUMN contexto_negocio TEXT")
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN filtro_fecha_especifica INTEGER DEFAULT 0")
     except Exception:
-        pass # Ya existe o error ignorado
+        pass  # Ya existe o error ignorado
+    
+    try:
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN fecha_filtro TEXT")
+    except Exception:
+        pass  # Ya existe o error ignorado
 
     print("DEBUG: [DB] Tabla usuarios verificada/creada.")
 
@@ -101,6 +108,95 @@ def crear_base_de_datos(nombre_bd: str = "kyber.db") -> None:
         )
     """)
     print("DEBUG: [DB] Tabla respuestas verificada/creada.")
+
+    # 5. Crear tabla remitentes_conocidos
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS remitentes_conocidos (
+            id SERIAL PRIMARY KEY,
+            email TEXT NOT NULL,
+            nombre TEXT,
+            primera_vez TEXT NOT NULL,
+            ultima_vez TEXT,
+            total_correos INTEGER DEFAULT 1,
+            estado TEXT DEFAULT 'nuevo',
+            usuario_id INTEGER,
+            UNIQUE(email, usuario_id)
+        )
+    """)
+    print("DEBUG: [DB] Tabla remitentes_conocidos verificada/creada.")
+
+    # 6. Crear tabla remitentes_bloqueados
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS remitentes_bloqueados (
+            id SERIAL PRIMARY KEY,
+            email TEXT NOT NULL,
+            nombre TEXT,
+            tipo TEXT DEFAULT 'bloqueado',
+            razon TEXT,
+            fecha_bloqueo TEXT NOT NULL,
+            usuario_id INTEGER,
+            UNIQUE(email, usuario_id)
+        )
+    """)
+    print("DEBUG: [DB] Tabla remitentes_bloqueados verificada/creada.")
+
+    # 7. Crear tabla suscripciones
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS suscripciones (
+            id SERIAL PRIMARY KEY,
+            remitente_email TEXT NOT NULL,
+            remitente_nombre TEXT,
+            link_cancelacion TEXT,
+            total_correos INTEGER DEFAULT 1,
+            ultimo_correo TEXT,
+            estado TEXT DEFAULT 'activa',
+            usuario_id INTEGER,
+            UNIQUE(remitente_email, usuario_id)
+        )
+    """)
+    print("DEBUG: [DB] Tabla suscripciones verificada/creada.")
+
+    # 8. Crear tabla reglas_organizacion
+    # Solo crear si no existe para evitar borrar datos al reiniciar
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS reglas_organizacion (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT NOT NULL,
+            tipo TEXT NOT NULL,
+            condicion_campo TEXT,
+            condicion_valor TEXT,
+            accion TEXT NOT NULL,
+            activa INTEGER DEFAULT 1,
+            usuario_id INTEGER
+        )
+    """)
+    print("DEBUG: [DB] Tabla reglas_organizacion verificada/creada.")
+
+    # 9. Crear tabla logs_limpieza
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS logs_limpieza (
+            id SERIAL PRIMARY KEY,
+            categoria_id INTEGER,
+            usuario_id INTEGER NOT NULL,
+            correos_procesados INTEGER DEFAULT 0,
+            fecha_ejecucion TEXT NOT NULL
+        )
+    """)
+    print("DEBUG: [DB] Tabla logs_limpieza verificada/creada.")
+
+    # 10. Crear tabla categorias_limpieza
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS categorias_limpieza (
+            id SERIAL PRIMARY KEY,
+            usuario_id INTEGER NOT NULL,
+            nombre TEXT NOT NULL,
+            descripcion TEXT,
+            remitentes TEXT,
+            fecha_creacion TEXT NOT NULL,
+            activa INTEGER DEFAULT 1
+        )
+    """)
+    print("DEBUG: [DB] Tabla categorias_limpieza verificada/creada.")
 
     conn.close()
     print("DEBUG: [DB] Proceso de inicialización finalizado.")
@@ -316,6 +412,7 @@ def insertar_log(
 def crear_usuario(
     email: str, password_hash: str, creado_en: str
 ) -> int:
+    print(f"DEBUG: [DB] Creando usuario: {email}")
     conn = _get_connection()
     cursor = conn.cursor()
     p = _get_placeholder()
@@ -329,13 +426,16 @@ def crear_usuario(
         user_id = cursor.fetchone()[0]
     else:
         # SQLite
+        print(f"DEBUG: [DB] Insertando usuario en SQLite")
         cursor.execute(
             f"INSERT INTO usuarios (email, password_hash, creado_en) VALUES ({p}, {p}, {p})",
             (email, password_hash, creado_en),
         )
         user_id = cursor.lastrowid
+        print(f"DEBUG: [DB] lastrowid: {user_id}")
         
     conn.commit()
+    print(f"DEBUG: [DB] Usuario creado con ID: {user_id}")
     conn.close()
     return user_id
 
@@ -347,7 +447,7 @@ def obtener_usuario_por_email(
     cursor = conn.cursor()
     p = _get_placeholder()
     cursor.execute(
-        f"SELECT id, email, password_hash, creado_en, gemini_api_key, gmail_user, gmail_password, scan_batch, scan_max, agente_activo, contexto_negocio FROM usuarios WHERE email = {p}",
+        f"SELECT id, email, password_hash, creado_en, gemini_api_key, gmail_user, gmail_password, scan_batch, scan_max, agente_activo, contexto_negocio, filtro_fecha_especifica, fecha_filtro FROM usuarios WHERE email = {p}",
         (email,),
     )
     fila = cursor.fetchone()
@@ -362,7 +462,7 @@ def obtener_usuario_por_id(
     cursor = conn.cursor()
     p = _get_placeholder()
     cursor.execute(
-        f"SELECT id, email, password_hash, creado_en, gemini_api_key, gmail_user, gmail_password, scan_batch, scan_max, agente_activo, contexto_negocio FROM usuarios WHERE id = {p}",
+        f"SELECT id, email, password_hash, creado_en, gemini_api_key, gmail_user, gmail_password, scan_batch, scan_max, agente_activo, contexto_negocio, filtro_fecha_especifica, fecha_filtro FROM usuarios WHERE id = {p}",
         (usuario_id,),
     )
     fila = cursor.fetchone()
@@ -374,7 +474,7 @@ def obtener_usuarios_agente_activo(nombre_bd: str = "kyber.db") -> List[Tuple[An
     conn = _get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, email, password_hash, creado_en, gemini_api_key, gmail_user, gmail_password, scan_batch, scan_max, agente_activo, contexto_negocio FROM usuarios WHERE agente_activo = 1"
+        "SELECT id, email, password_hash, creado_en, gemini_api_key, gmail_user, gmail_password, scan_batch, scan_max, agente_activo, contexto_negocio, filtro_fecha_especifica, fecha_filtro FROM usuarios WHERE agente_activo = 1"
     )
     filas = cursor.fetchall()
     conn.close()
@@ -390,6 +490,8 @@ def actualizar_configuracion_usuario(
     scan_max: int | None = None,
     agente_activo: int | None = None,
     contexto_negocio: str | None = None,
+    filtro_fecha_especifica: int | None = None,
+    fecha_filtro: str | None = None,
     nombre_bd: str = "kyber.db",
 ) -> None:
     conn = _get_connection()
@@ -399,15 +501,6 @@ def actualizar_configuracion_usuario(
     updates = []
     params = []
     
-    if gemini_api_key is not None:
-        updates.append(f"gemini_api_key = {p}")
-        params.append(gemini_api_key)
-    if gmail_user is not None:
-        updates.append(f"gmail_user = {p}")
-        params.append(gmail_user)
-    if gmail_password is not None:
-        updates.append(f"gmail_password = {p}")
-        params.append(gmail_password)
     if scan_batch is not None:
         updates.append(f"scan_batch = {p}")
         params.append(scan_batch)
@@ -420,16 +513,27 @@ def actualizar_configuracion_usuario(
     if contexto_negocio is not None:
         updates.append(f"contexto_negocio = {p}")
         params.append(contexto_negocio)
+    if filtro_fecha_especifica is not None:
+        updates.append(f"filtro_fecha_especifica = {p}")
+        params.append(filtro_fecha_especifica)
+    if fecha_filtro is not None:
+        updates.append(f"fecha_filtro = {p}")
+        params.append(fecha_filtro)
         
     if not updates:
+        print("DEBUG: [DB] No hay actualizaciones")
         conn.close()
         return
         
     query = f"UPDATE usuarios SET {', '.join(updates)} WHERE id = {p}"
     params.append(usuario_id)
     
+    print(f"DEBUG: [DB] Query: {query}")
+    print(f"DEBUG: [DB] Params: {tuple(params)}")
+    
     cursor.execute(query, tuple(params))
     conn.commit()
+    print("DEBUG: [DB] Configuración actualizada exitosamente")
     conn.close()
 
 
@@ -614,6 +718,37 @@ def obtener_stats_categorias(
     conn.close()
     return filas
 
+def obtener_categorias_unicas(usuario_id: int | None = None) -> List[str]:
+    """Obtiene todas las categorías únicas que existen en los logs."""
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+    
+    if usuario_id is None:
+        cursor.execute(
+            """
+            SELECT DISTINCT COALESCE(categoria, 'GENERAL') AS cat
+            FROM logs
+            WHERE categoria IS NOT NULL AND categoria != ''
+            ORDER BY cat ASC
+            """
+        )
+    else:
+        cursor.execute(
+            f"""
+            SELECT DISTINCT COALESCE(categoria, 'GENERAL') AS cat
+            FROM logs
+            WHERE (usuario_id = {p} OR usuario_id IS NULL)
+              AND categoria IS NOT NULL AND categoria != ''
+            ORDER BY cat ASC
+            """,
+            (usuario_id,),
+        )
+    filas = cursor.fetchall()
+    conn.close()
+    return [fila[0] for fila in filas]
+
+
 def obtener_borradores_por_periodo(
     periodo: str = "diario",
     limite: int = 30,
@@ -675,3 +810,424 @@ def obtener_borradores_por_periodo(
 if __name__ == "__main__":
     _FER_DEV_SHEI_200226 = "F-E-R-D-E-V-S-H-E-I-20-02-26"
     crear_base_de_datos()
+
+
+# ============================================
+# FUNCIONES PARA REMITENTES CONOCIDOS
+# ============================================
+
+def registrar_remitente(email: str, nombre: str, usuario_id: int) -> None:
+    """Registra o actualiza un remitente conocido."""
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+    ahora = datetime.utcnow().isoformat()
+    
+    # Intentar actualizar si existe
+    cursor.execute(
+        f"""
+        UPDATE remitentes_conocidos 
+        SET ultima_vez = {p}, total_correos = total_correos + 1, nombre = {p}
+        WHERE email = {p} AND usuario_id = {p}
+        """,
+        (ahora, nombre, email, usuario_id)
+    )
+    
+    # Si no existe, insertar
+    if cursor.rowcount == 0:
+        cursor.execute(
+            f"""
+            INSERT INTO remitentes_conocidos (email, nombre, primera_vez, ultima_vez, usuario_id)
+            VALUES ({p}, {p}, {p}, {p}, {p})
+            """,
+            (email, nombre, ahora, ahora, usuario_id)
+        )
+    
+    conn.commit()
+    conn.close()
+
+
+def es_remitente_nuevo(email: str, usuario_id: int) -> bool:
+    """Verifica si un remitente es nuevo (primera vez que escribe)."""
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+    
+    cursor.execute(
+        f"SELECT estado FROM remitentes_conocidos WHERE email = {p} AND usuario_id = {p}",
+        (email, usuario_id)
+    )
+    fila = cursor.fetchone()
+    conn.close()
+    
+    if not fila:
+        return True  # No existe, es nuevo
+    
+    return fila[0] == 'nuevo'
+
+
+def obtener_remitentes_nuevos(usuario_id: int) -> List[Tuple[Any, ...]]:
+    """Obtiene todos los remitentes nuevos pendientes de revisar."""
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+    
+    cursor.execute(
+        f"""
+        SELECT id, email, nombre, primera_vez, total_correos
+        FROM remitentes_conocidos
+        WHERE usuario_id = {p} AND estado = 'nuevo'
+        ORDER BY primera_vez DESC
+        """,
+        (usuario_id,)
+    )
+    filas = cursor.fetchall()
+    conn.close()
+    return filas
+def obtener_todos_remitentes(usuario_id: int, limite: int = 100) -> List[Tuple[Any, ...]]:
+    """Obtiene TODOS los remitentes conocidos con su estado."""
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p1, p2, p3 = _get_placeholder(), _get_placeholder(), _get_placeholder()
+
+    cursor.execute(
+        f"""
+        SELECT
+            rc.id,
+            rc.email,
+            rc.nombre,
+            rc.primera_vez,
+            rc.ultima_vez,
+            rc.total_correos,
+            rc.estado,
+            CASE
+                WHEN rb.id IS NOT NULL THEN rb.tipo
+                ELSE NULL
+            END as bloqueado_tipo,
+            SUBSTR(rc.email, INSTR(rc.email, '@') + 1) as dominio
+        FROM remitentes_conocidos rc
+        LEFT JOIN remitentes_bloqueados rb ON rc.email = rb.email AND rb.usuario_id = {p2}
+        WHERE rc.usuario_id = {p1}
+        ORDER BY rc.ultima_vez DESC
+        LIMIT {p3}
+        """,
+        (usuario_id, usuario_id, limite)
+    )
+    filas = cursor.fetchall()
+    conn.close()
+    return filas
+
+
+
+def aprobar_remitente(remitente_id: int) -> None:
+    """Marca un remitente como aprobado."""
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+    
+    cursor.execute(
+        f"UPDATE remitentes_conocidos SET estado = 'aprobado' WHERE id = {p}",
+        (remitente_id,)
+    )
+    conn.commit()
+    conn.close()
+
+
+def bloquear_remitente_desde_nuevos(remitente_id: int, usuario_id: int, razon: str = "Bloqueado desde nuevos") -> None:
+    """Bloquea un remitente desde la lista de nuevos."""
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+    
+    # Obtener email del remitente
+    cursor.execute(
+        f"SELECT email, nombre FROM remitentes_conocidos WHERE id = {p}",
+        (remitente_id,)
+    )
+    fila = cursor.fetchone()
+    
+    if fila:
+        email, nombre = fila
+        ahora = datetime.utcnow().isoformat()
+        
+        # Agregar a bloqueados
+        cursor.execute(
+            f"""
+            INSERT INTO remitentes_bloqueados (email, nombre, tipo, razon, fecha_bloqueo, usuario_id)
+            VALUES ({p}, {p}, 'bloqueado', {p}, {p}, {p})
+            ON CONFLICT (email, usuario_id) DO NOTHING
+            """,
+            (email, nombre, razon, ahora, usuario_id)
+        )
+        
+        # Actualizar estado en conocidos
+        cursor.execute(
+            f"UPDATE remitentes_conocidos SET estado = 'bloqueado' WHERE id = {p}",
+            (remitente_id,)
+        )
+    
+    conn.commit()
+    conn.close()
+
+
+# ============================================
+# FUNCIONES PARA REMITENTES BLOQUEADOS
+# ============================================
+
+def agregar_remitente_bloqueado(email: str, nombre: str, tipo: str, razon: str, usuario_id: int) -> None:
+    """Agrega un remitente a la lista de bloqueados o silenciados."""
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+    ahora = datetime.utcnow().isoformat()
+    
+    cursor.execute(
+        f"""
+        INSERT INTO remitentes_bloqueados (email, nombre, tipo, razon, fecha_bloqueo, usuario_id)
+        VALUES ({p}, {p}, {p}, {p}, {p}, {p})
+        ON CONFLICT (email, usuario_id) DO UPDATE SET tipo = {p}, razon = {p}
+        """,
+        (email, nombre, tipo, razon, ahora, usuario_id, tipo, razon)
+    )
+    conn.commit()
+    conn.close()
+
+
+def obtener_remitentes_bloqueados(usuario_id: int) -> List[Tuple[Any, ...]]:
+    """Obtiene todos los remitentes bloqueados."""
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+    
+    cursor.execute(
+        f"""
+        SELECT id, email, nombre, tipo, razon, fecha_bloqueo
+        FROM remitentes_bloqueados
+        WHERE usuario_id = {p}
+        ORDER BY fecha_bloqueo DESC
+        """,
+        (usuario_id,)
+    )
+    filas = cursor.fetchall()
+    conn.close()
+    return filas
+
+
+def esta_bloqueado(email: str, usuario_id: int) -> bool:
+    """Verifica si un remitente está bloqueado."""
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+    
+    cursor.execute(
+        f"SELECT tipo FROM remitentes_bloqueados WHERE email = {p} AND usuario_id = {p}",
+        (email, usuario_id)
+    )
+    fila = cursor.fetchone()
+    conn.close()
+    
+    return fila is not None and fila[0] == 'bloqueado'
+
+
+def esta_silenciado(email: str, usuario_id: int) -> bool:
+    """Verifica si un remitente está silenciado."""
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+    
+    cursor.execute(
+        f"SELECT tipo FROM remitentes_bloqueados WHERE email = {p} AND usuario_id = {p}",
+        (email, usuario_id)
+    )
+    fila = cursor.fetchone()
+    conn.close()
+    
+    return fila is not None and fila[0] == 'silenciado'
+
+
+def desbloquear_remitente(remitente_id: int) -> None:
+    """Elimina un remitente de la lista de bloqueados."""
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+    
+    cursor.execute(
+        f"DELETE FROM remitentes_bloqueados WHERE id = {p}",
+        (remitente_id,)
+    )
+    conn.commit()
+    conn.close()
+
+
+def desbloquear_remitente_por_email(email: str, usuario_id: int) -> None:
+    """Elimina un remitente de la lista de bloqueados por su email."""
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+    
+    cursor.execute(
+        f"DELETE FROM remitentes_bloqueados WHERE email = {p} AND usuario_id = {p}",
+        (email, usuario_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+# ============================================
+# FUNCIONES PARA SUSCRIPCIONES
+# ============================================
+
+def registrar_suscripcion(email: str, nombre: str, link: str, usuario_id: int) -> None:
+    """Registra o actualiza una suscripción detectada."""
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+    ahora = datetime.utcnow().isoformat()
+    
+    cursor.execute(
+        f"""
+        INSERT INTO suscripciones (remitente_email, remitente_nombre, link_cancelacion, ultimo_correo, usuario_id)
+        VALUES ({p}, {p}, {p}, {p}, {p})
+        ON CONFLICT (remitente_email, usuario_id) DO UPDATE 
+        SET total_correos = suscripciones.total_correos + 1, 
+            ultimo_correo = {p},
+            link_cancelacion = {p}
+        """,
+        (email, nombre, link, ahora, usuario_id, ahora, link)
+    )
+    conn.commit()
+    conn.close()
+
+
+def obtener_suscripciones(usuario_id: int) -> List[Tuple[Any, ...]]:
+    """Obtiene todas las suscripciones activas y canceladas."""
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+    
+    cursor.execute(
+        f"""
+        SELECT 
+            id, 
+            remitente_email, 
+            remitente_nombre, 
+            link_cancelacion, 
+            total_correos, 
+            ultimo_correo, 
+            estado,
+            SUBSTR(remitente_email, INSTR(remitente_email, '@') + 1) as dominio
+        FROM suscripciones
+        WHERE usuario_id = {p}
+        ORDER BY total_correos DESC, ultimo_correo DESC
+        """,
+        (usuario_id,)
+    )
+    filas = cursor.fetchall()
+    conn.close()
+    return filas
+
+
+def marcar_suscripcion_cancelada(suscripcion_id: int) -> None:
+    """Marca una suscripción como cancelada."""
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+    
+    cursor.execute(
+        f"UPDATE suscripciones SET estado = 'cancelada' WHERE id = {p}",
+        (suscripcion_id,)
+    )
+    conn.commit()
+    conn.close()
+
+
+# ============================================
+# FUNCIONES PARA REGLAS DE ORGANIZACIÓN
+# ============================================
+
+def crear_regla_organizacion(nombre: str, tipo: str, condicion_campo: str, condicion_valor: str, accion: str, usuario_id: int) -> None:
+    """Crea una nueva regla de organización automática."""
+    print(f"DEBUG: [DB] Creando regla: {nombre} para usuario_id={usuario_id}")
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+    
+    cursor.execute(
+        f"""
+        INSERT INTO reglas_organizacion (nombre, tipo, condicion_campo, condicion_valor, accion, activa, usuario_id)
+        VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p})
+        """,
+        (nombre, tipo, condicion_campo, condicion_valor, accion, 1, usuario_id)
+    )
+    conn.commit()
+    print(f"DEBUG: [DB] Regla creada exitosamente")
+    
+    # Verificar que se insertó correctamente
+    cursor.execute(f"SELECT COUNT(*) FROM reglas_organizacion WHERE usuario_id = {p}", (usuario_id,))
+    count = cursor.fetchone()[0]
+    print(f"DEBUG: [DB] Verificación: Total de reglas después de insertar: {count}")
+    
+    conn.close()
+
+
+def obtener_reglas_organizacion(usuario_id: int) -> List[Tuple[Any, ...]]:
+    """Obtiene todas las reglas de organización activas."""
+    print(f"DEBUG: [DB] Obteniendo reglas para usuario_id={usuario_id}")
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+    
+    # Primero verificar si hay datos en la tabla
+    cursor.execute(f"SELECT COUNT(*) FROM reglas_organizacion WHERE usuario_id = {p}", (usuario_id,))
+    count = cursor.fetchone()[0]
+    print(f"DEBUG: [DB] Total de reglas en BD: {count}")
+    
+    if count == 0:
+        print("DEBUG: [DB] No hay reglas, retornando lista vacía")
+        conn.close()
+        return []
+    
+    cursor.execute(
+        f"""
+        SELECT id, nombre, tipo, condicion_campo, condicion_valor, accion, activa
+        FROM reglas_organizacion
+        WHERE usuario_id = {p}
+        ORDER BY id DESC
+        """,
+        (usuario_id,)
+    )
+    filas = cursor.fetchall()
+    print(f"DEBUG: [DB] Se encontraron {len(filas)} reglas")
+    for i, fila in enumerate(filas):
+        print(f"DEBUG: [DB] Regla {i}: {fila}")
+    conn.close()
+    return filas
+
+
+def toggle_regla_organizacion(regla_id: int) -> None:
+    """Activa o desactiva una regla de organización."""
+    print(f"DEBUG: [DB] Toggle regla {regla_id}")
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+    
+    cursor.execute(
+        f"UPDATE reglas_organizacion SET activa = 1 - activa WHERE id = {p}",
+        (regla_id,)
+    )
+    conn.commit()
+    print(f"DEBUG: [DB] Regla {regla_id} toggleada")
+    conn.close()
+
+
+def eliminar_regla_organizacion(regla_id: int) -> None:
+    """Elimina una regla de organización."""
+    print(f"DEBUG: [DB] Eliminando regla {regla_id}")
+    conn = _get_connection()
+    cursor = conn.cursor()
+    p = _get_placeholder()
+    
+    cursor.execute(f"DELETE FROM reglas_organizacion WHERE id = {p}", (regla_id,))
+    conn.commit()
+    print(f"DEBUG: [DB] Regla {regla_id} eliminada")
+    conn.close()
